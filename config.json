@@ -205,6 +205,38 @@
       "category_id": 163
     },
     {
+      "name": "iPhone 17",
+      "query": "iphone 17",
+      "max_price": 600,
+      "min_price": 35,
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "iPhone 17 Pro",
+      "query": "iphone 17 pro",
+      "max_price": 800,
+      "min_price": 35,
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "iPhone 17 Pro Max",
+      "query": "iphone 17 pro max",
+      "max_price": 900,
+      "min_price": 35,
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "iPhone 17e",
+      "query": "iphone 17e",
+      "max_price": 500,
+      "min_price": 35,
+      "enabled": true,
+      "category_id": 163
+    },
+    {
       "name": "Samsung A54",
       "query": "samsung a54",
       "max_price": 85,
@@ -510,6 +542,46 @@
       "max_price": 400,
       "min_price": 35,
       "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "Google Pixel 10",
+      "query": "pixel 10",
+      "max_price": 500,
+      "min_price": 35,
+      "keywords_blocked": [
+        "pro",
+        "xl",
+        "10a"
+      ],
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "Google Pixel 10a",
+      "query": "pixel 10a",
+      "max_price": 280,
+      "min_price": 35,
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "Google Pixel 10 Pro",
+      "query": "pixel 10 pro",
+      "max_price": 600,
+      "min_price": 35,
+      "keywords_blocked": [
+        "xl"
+      ],
+      "enabled": true,
+      "category_id": 163
+    },
+    {
+      "name": "Google Pixel 10 Pro XL",
+      "query": "pixel 10 pro xl",
+      "max_price": 400,
+      "min_price": 35,
+      "enabled": false,
       "category_id": 163
     },
     {
