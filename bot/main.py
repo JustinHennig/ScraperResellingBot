@@ -38,12 +38,14 @@ def _normalize_pricer_model(name: str) -> str:
     # PricerBot stores Samsung models as "Samsung Galaxy S24", "Samsung Galaxy A55", etc.
     # ScraperBot config uses shorter names like "Samsung S24", "Samsung A54".
     # Insert "Galaxy" when it is missing so the LIKE lookup matches.
+    # Also normalise " Plus" → "+" to match PricerBot's config (e.g. "S24+" not "S24 Plus").
     import re as _re
-    return _re.sub(
+    name = _re.sub(
         r'^(Samsung)\s+(?!Galaxy\b)([A-Z]\d)',
         r'\1 Galaxy \2',
         name,
     )
+    return name.replace(" Plus", "+")
 
 
 def fetch_price_estimate(model_name: str, pricer_api_url: str) -> tuple[Optional[float], Optional[float]]:
