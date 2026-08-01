@@ -152,7 +152,14 @@ def parse_price(price_text: str) -> Optional[int]:
     has_currency = re.search(r'[€]|\bEUR\b|\bVB\b|\bvb\b', price_text, re.IGNORECASE)
     if re.search(r'[a-zA-ZäöüÄÖÜß]', price_text) and not has_currency:
         return None
-    digits = re.sub(r'[^0-9]', '', price_text)
+    # Reduced-price listings render both the struck-through old price and the
+    # new price inside the same element, e.g. "470 €399 €" once get_text()
+    # merges them. Extract each number separately and keep the last one (the
+    # current price) instead of concatenating every digit into one huge number.
+    matches = re.findall(r'\d[\d.]*', price_text)
+    if not matches:
+        return None
+    digits = re.sub(r'[^0-9]', '', matches[-1])
     if not digits:
         return None
     try:
