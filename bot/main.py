@@ -38,12 +38,14 @@ def _normalize_pricer_model(name: str) -> str:
     # PricerBot stores Samsung models as "Samsung Galaxy S24", "Samsung Galaxy A55", etc.
     # ScraperBot config uses shorter names like "Samsung S24", "Samsung A54".
     # Insert "Galaxy" when it is missing so the LIKE lookup matches.
+    # Also normalise " Plus" → "+" to match PricerBot's config (e.g. "S24+" not "S24 Plus").
     import re as _re
-    return _re.sub(
+    name = _re.sub(
         r'^(Samsung)\s+(?!Galaxy\b)([A-Z]\d)',
         r'\1 Galaxy \2',
         name,
     )
+    return name.replace(" Plus", "+")
 
 
 def fetch_price_estimate(model_name: str, pricer_api_url: str) -> tuple[Optional[float], Optional[float]]:
@@ -188,6 +190,9 @@ def check_search(
     if not query:
         return
 
+    min_price = search_config.get("min_price")
+    max_price = search_config.get("max_price")
+
     logger.info(f"Checking search: '{name}'")
     cutoff = datetime.now() - timedelta(minutes=30)
 
@@ -197,7 +202,7 @@ def check_search(
     for page in range(3):
         if stop_event.is_set():
             return
-        page_listings = fetch_listings(query, page=page)
+        page_listings = fetch_listings(query, page=page, min_price=min_price, max_price=max_price)
         if not page_listings:
             break
         # Stop if we hit a listing we've already processed — it and everything after it
@@ -233,7 +238,6 @@ def check_search(
 
         # Filter: ignore listings older than 30 minutes
         if listing.posted_at is not None and listing.posted_at < cutoff:
-            logger.info(f"Skipped old listing {listing.listing_id} '{listing.title[:40]}' (posted {listing.posted_at:%H:%M})")
             continue
 
         good, reason = is_good_deal(listing, search_config, global_blocked)

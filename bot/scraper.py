@@ -84,11 +84,12 @@ class Listing:
 
 
 # Builds the Kleinanzeigen search URL.
-def build_search_url(query: str, page: int = 0) -> str:
+def build_search_url(query: str, page: int = 0, min_price: int | None = None, max_price: int | None = None) -> str:
     encoded_query = quote_plus(query)
     page_segment = f"/seite:{page + 1}" if page > 0 else ""
+    price_segment = f"/s-preis:{min_price or ''}:{max_price or ''}" if (min_price or max_price) else ""
     return (
-        f"https://www.kleinanzeigen.de/s-anzeige:angebote"
+        f"https://www.kleinanzeigen.de{price_segment}"
         f"/{encoded_query}"
         f"/k0{page_segment}"
     )
@@ -172,8 +173,8 @@ def parse_price(price_text: str) -> Optional[int]:
 
 # Fetches listings from Kleinanzeigen for a given search query.
 # Returns a list of Listing objects.
-def fetch_listings(query: str, page: int = 0) -> list[Listing]:
-    url = build_search_url(query, page=page)
+def fetch_listings(query: str, page: int = 0, min_price: int | None = None, max_price: int | None = None) -> list[Listing]:
+    url = build_search_url(query, page=page, min_price=min_price, max_price=max_price)
     logger.debug(f"Fetching: {url}")
 
     try:
