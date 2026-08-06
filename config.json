@@ -581,7 +581,7 @@
       "query": "pixel 10 pro xl",
       "max_price": 400,
       "min_price": 35,
-      "enabled": false,
+      "enabled": true,
       "category_id": 163
     },
     {

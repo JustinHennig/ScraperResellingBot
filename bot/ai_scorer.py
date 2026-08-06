@@ -65,12 +65,45 @@ _USER_TEMPLATE = """Titel: {title}
 Preis: {price} EUR{vb}{sell_price_line}
 Beschreibung: {description}"""
 
+# Payment methods that strip buyer protection — a common scam pattern.
+# "PayPal Freunde" (Friends & Family) has no PayPal buyer protection;
+# "nur Überweisung" (bank transfer only) has no protection at all.
+_PAYPAL_FRIENDS_RE = re.compile(
+    r'paypal[^.]{0,25}(?:freunde|f\s*&\s*f\b|f\+f\b)|(?:freunde|f\s*&\s*f\b)[^.]{0,25}paypal',
+    re.IGNORECASE,
+)
+_BANK_TRANSFER_ONLY_RE = re.compile(
+    r'nur\s+(?:bar\s+oder\s+)?(?:per\s+)?(?:vorab[- ]?)?überweisung|ausschließlich\s+(?:per\s+)?überweisung',
+    re.IGNORECASE,
+)
 
-# Calls Groq API and returns (score, warning). Returns (None, "") on any failure.
+
+# Deterministic (non-AI) check for scam-typical payment demands. Run outside the
+# LLM call so the warning is never missed due to an AI parsing/API failure.
+def _payment_warning(text: str) -> str:
+    if _PAYPAL_FRIENDS_RE.search(text):
+        return "Nur PayPal Freunde gewünscht — kein Käuferschutz"
+    if _BANK_TRANSFER_ONLY_RE.search(text):
+        return "Nur Überweisung gewünscht — kein Käuferschutz"
+    return ""
+
+
+# Combines the deterministic payment warning with the AI-generated warning.
+def _merge_warning(payment_warning: str, ai_warning: str) -> str:
+    if not payment_warning:
+        return ai_warning
+    if not ai_warning:
+        return payment_warning
+    return f"{payment_warning}; {ai_warning}"
+
+
+# Calls Groq API and returns (score, warning). Returns (None, payment_warning) on any failure.
 def score_listing(listing, api_key: str) -> tuple:
+    payment_warning = _payment_warning(f"{listing.title} {listing.description or ''}")
+
     if not api_key:
         logger.warning("Groq API key not configured — skipping AI score")
-        return None, ""
+        return None, payment_warning
 
     # 600 chars gives the stronger model enough context to make accurate condition judgments
     description = (listing.description or "")[:600] or "Keine Beschreibung"
@@ -120,9 +153,9 @@ def score_listing(listing, api_key: str) -> tuple:
                     time.sleep(wait)
                 else:
                     logger.warning(f"Groq scoring failed for listing {listing.listing_id}: {e}")
-                    return None, ""
+                    return None, payment_warning
     else:
-        return None, ""
+        return None, payment_warning
 
     try:
         # Strip markdown code fences if the model wraps the JSON anyway
@@ -135,8 +168,8 @@ def score_listing(listing, api_key: str) -> tuple:
 
         # Clamp score to valid range
         score = max(1, min(10, score))
-        return score, warning
+        return score, _merge_warning(payment_warning, warning)
 
     except Exception as e:
         logger.warning(f"Groq response parse failed for listing {listing.listing_id}: {e} — raw: {raw[:100]}")
-        return None, ""
+        return None, payment_warning
