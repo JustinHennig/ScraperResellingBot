@@ -156,6 +156,16 @@ ResellingBot/
 
 ---
 
+## Deployment auf dem Raspberry Pi
+
+Der Pi aktualisiert sich selbst: `resellingbot-update.timer` startet alle 5 Minuten `update.sh`. Gibt es neue Commits auf `origin/main`, holt das Skript sie per Fast-Forward, installiert `requirements.txt` ins `venv` und startet `resellingbot.service` neu.
+
+- Neuer Code geht also live, sobald er auf `main` gepusht ist — spätestens nach 5 Minuten.
+- Kompiliert der neue Code nicht, bleibt der Pi auf dem alten Stand und der Lauf schlägt fehl.
+- Lokale Änderungen auf dem Pi blockieren das Update (Fast-Forward schlägt fehl), statt überschrieben zu werden.
+- Protokoll: `journalctl -u resellingbot-update.service`
+
+---
 ## Hinweise
 
 - `data/seen_listings.json` verhindert Doppel-Benachrichtigungen, auch nach Neustart.
