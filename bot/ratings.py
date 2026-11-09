@@ -4,13 +4,17 @@
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 RATINGS_FILE = Path(__file__).parent.parent / "data" / "ratings.json"
 _lock = threading.Lock()
+
+# Unrated listings older than this are dropped so the file doesn't grow forever
+# (~180 notifications a day). Rated listings are always kept.
+UNRATED_MAX_AGE_DAYS = 60
 
 
 def _load() -> dict:
@@ -51,11 +55,26 @@ def record_listing(listing_id: str, title: str, price, url: str, search_name: st
             "notified_at": datetime.now(timezone.utc).isoformat(),
             "ratings": data.get(listing_id, {}).get("ratings", {}),
         }
+        _prune_unrated(data)
         _save(data)
 
 
+# Removes unrated records notified more than UNRATED_MAX_AGE_DAYS ago.
+def _prune_unrated(data: dict) -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=UNRATED_MAX_AGE_DAYS)
+    for listing_id in [lid for lid, rec in data.items() if not rec.get("ratings") and _notified_before(rec, cutoff)]:
+        del data[listing_id]
+
+
+def _notified_before(record: dict, cutoff: datetime) -> bool:
+    try:
+        return datetime.fromisoformat(record.get("notified_at", "")) < cutoff
+    except ValueError:
+        return False  # keep records with a missing or odd timestamp
+
+
 # Records a chat's up/down rating for a listing. Returns the listing record,
-# or None if the listing was never recorded (e.g. ratings.json was cleared).
+# or None if the listing isn't recorded (pruned as unrated, or ratings.json was cleared).
 def set_rating(listing_id: str, chat_id: str, rating: str) -> dict | None:
     with _lock:
         data = _load()
@@ -71,7 +90,7 @@ def set_rating(listing_id: str, chat_id: str, rating: str) -> dict | None:
 
 
 # Returns every recorded listing keyed by listing id, each with its ratings
-# (if any). Used by bot/ai_scorer.py to learn patterns from past 👍/👎 taps.
+# (if any). Used by the /ratings page and the (currently unused) AI preference filter.
 def all_records() -> dict:
     with _lock:
         return _load()

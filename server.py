@@ -471,10 +471,12 @@ def _handle_rating_callback(token: str, callback_query: dict, allowed: set[str])
     _, listing_id, rating = data_str.split(":", 2)
     record = set_rating(listing_id, chat_id, rating)
     label = "👍 Kaufen" if rating == "up" else "👎 Nicht kaufen"
+    # The record is gone for old, unrated listings (pruned after 60 days)
+    answer = f"Gespeichert: {label}" if record is not None else "Anzeige zu alt — Bewertung nicht gespeichert"
 
     requests.post(
         f"https://api.telegram.org/bot{token}/answerCallbackQuery",
-        json={"callback_query_id": cq_id, "text": f"Gespeichert: {label}"},
+        json={"callback_query_id": cq_id, "text": answer},
         timeout=10,
     )
     if record is not None:
