@@ -1,6 +1,6 @@
 data/seen_listings.json
 data/ratings.json
-data/*.tmp
+*.tmp
 logs/
 *.log
 __pycache__/
