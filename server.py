@@ -15,10 +15,10 @@ from flask import Flask, jsonify, render_template, request
 
 from bot.main import (
     CONFIG_FILE,
-    config_without_credentials,
     load_config,
     load_seen_listings,
     run_all_searches,
+    save_config_overrides,
     setup_logging,
 )
 from bot.notifier import send_telegram_message
@@ -203,21 +203,15 @@ def api_searches():
     return jsonify(result)
 
 
-# Write _config back to config.json atomically. Must be called under _lock.
-# Credentials merged in from credentials.json are left out so they never end up in config.json.
+# Persists live search changes (prices, on/off, added searches) to
+# data/config_overrides.json. config.json is never written at runtime: it is
+# tracked by git, and a modified copy would block the Pi's auto-updater.
+# Must be called under _lock.
 def _save_config() -> None:
-    tmp = CONFIG_FILE.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(config_without_credentials(_config), f, indent=2, ensure_ascii=False)
-    try:
-        tmp.replace(CONFIG_FILE)
-    except PermissionError:
-        import shutil
-        shutil.copy2(tmp, CONFIG_FILE)
-        tmp.unlink(missing_ok=True)
+    save_config_overrides(_config)
 
 
-# Toggles the enabled state of a search by name and persists the change to config.json.
+# Toggles the enabled state of a search by name and persists the change (see _save_config).
 @app.route("/api/searches/toggle", methods=["POST"])
 def api_searches_toggle():
     data = request.get_json(silent=True) or {}
@@ -242,7 +236,7 @@ def api_searches_toggle():
     return jsonify({"ok": True, "name": name, "enabled": new_state})
 
 
-# Updates min_price and/or max_price for a search by name and persists the change to config.json.
+# Updates min_price and/or max_price for a search by name and persists the change (see _save_config).
 @app.route("/api/searches/price", methods=["POST"])
 def api_searches_price():
     data = request.get_json(silent=True) or {}
@@ -281,7 +275,7 @@ def api_searches_price():
     return jsonify({"ok": True, "name": name, **updates})
 
 
-# Adds a new search entry and persists it to config.json.
+# Adds a new search entry and persists it (see _save_config).
 @app.route("/api/searches/add", methods=["POST"])
 def api_searches_add():
     data = request.get_json(silent=True) or {}

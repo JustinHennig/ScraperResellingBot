@@ -163,6 +163,8 @@ Der Pi aktualisiert sich selbst: `resellingbot-update.timer` startet alle 5 Minu
 - Neuer Code geht also live, sobald er auf `main` gepusht ist — spätestens nach 5 Minuten.
 - Kompiliert der neue Code nicht, bleibt der Pi auf dem alten Stand und der Lauf schlägt fehl.
 - Lokale Änderungen auf dem Pi blockieren das Update (Fast-Forward schlägt fehl), statt überschrieben zu werden.
+- Schlägt ein Schritt fehl (Kompilieren, `pip install`, Neustart), geht der Pi auf den alten Stand zurück und versucht es beim nächsten Lauf erneut.
+- Änderungen per Telegram oder Dashboard (Preise, Suchen an/aus, neue Suchen) landen in `data/config_overrides.json`, nicht in `config.json`. So bleibt der Git-Stand auf dem Pi sauber, und Live-Änderungen gelten vor `config.json`.
 - Protokoll: `journalctl -u resellingbot-update.service`
 
 ---

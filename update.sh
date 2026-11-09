@@ -14,13 +14,16 @@ echo "New commits ${LOCAL:0:7} -> ${REMOTE:0:7}, updating..."
 # Fast-forward only: refuses to touch local edits or a diverged history instead of overwriting them
 git merge --ff-only --quiet origin/main
 
-# Don't restart into code that doesn't even compile — go back and fail loudly instead
-if ! venv/bin/python -m compileall -q bot server.py >/dev/null; then
-	echo "New code doesn't compile — staying on ${LOCAL:0:7}" >&2
+# If any step fails, go back to the old commit: otherwise HEAD would already match
+# origin/main, the next run would see nothing to do, and the new code would never start
+rollback() {
+	echo "$1 — staying on ${LOCAL:0:7}, retrying next run" >&2
 	git reset --quiet --hard "$LOCAL"
 	exit 1
-fi
+}
 
-venv/bin/pip install --quiet -r requirements.txt
-sudo -n systemctl restart resellingbot.service
+# Don't restart into code that doesn't even compile
+venv/bin/python -m compileall -q bot server.py >/dev/null || rollback "New code doesn't compile"
+venv/bin/pip install --quiet -r requirements.txt || rollback "Installing requirements failed"
+sudo -n systemctl restart resellingbot.service || rollback "Restarting the bot failed"
 echo "Bot restarted on $(git rev-parse --short HEAD)"

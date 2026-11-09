@@ -61,7 +61,10 @@ def send_telegram_photo(tg_config: dict, image_url: str, caption: str, reply_mar
             response = requests.post(
                 f"{TG_API_URL}{token}/sendPhoto",
                 json={"chat_id": chat_id, **payload_base},
-                timeout=10,
+                # Telegram downloads the image from Kleinanzeigen before answering; a
+                # too-short timeout made us fall back to text although the photo
+                # arrived, so the listing was sent twice
+                timeout=30,
             )
             if response.status_code != 200:
                 logger.warning(f"Telegram photo send failed for {chat_id}: HTTP {response.status_code} — {response.text[:200]}")

@@ -31,6 +31,12 @@ from bot.ai_scorer import score_listing, payment_red_flag
 
 CONFIG_FILE = Path(__file__).parent.parent / "config.json"
 CREDENTIALS_FILE = Path(__file__).parent.parent / "credentials.json"
+# Live changes made from Telegram or the dashboard (prices, on/off, added
+# searches). Kept out of config.json — which is tracked by git — so the Pi's
+# checkout stays clean and its auto-updater can always fast-forward.
+OVERRIDES_FILE = Path(__file__).parent.parent / "data" / "config_overrides.json"
+# Search fields that can be changed live, with the value a missing field means
+_OVERRIDE_FIELDS = {"min_price": 0, "max_price": 0, "enabled": True}
 
 logger = logging.getLogger(__name__)
 _seen_lock = Lock()
@@ -109,24 +115,55 @@ def load_config() -> dict:
                 {k: v for k, v in creds["telegram"].items() if v}
             )
 
+    _apply_overrides(config)
     return config
 
 
-# Returns a copy of the config without the values load_config merged in from
-# credentials.json, so writing the config back never leaks tokens into
-# config.json (which is tracked by git).
-def config_without_credentials(config: dict) -> dict:
-    stripped = json.loads(json.dumps(config))
-    if not CREDENTIALS_FILE.exists():
-        return stripped
-    with CREDENTIALS_FILE.open(encoding="utf-8") as f:
-        creds = json.load(f)
-    if creds.get("groq_api_key"):
-        stripped.get("settings", {}).pop("groq_api_key", None)
-    for key, value in (creds.get("telegram") or {}).items():
-        if value:
-            stripped.get("telegram", {}).pop(key, None)
-    return stripped
+# Applies data/config_overrides.json on top of config.json: changed prices and
+# on/off states of existing searches, plus searches added from the dashboard.
+# A live change wins over config.json until it is changed live again.
+def _apply_overrides(config: dict) -> None:
+    if not OVERRIDES_FILE.exists():
+        return
+    try:
+        with OVERRIDES_FILE.open(encoding="utf-8") as f:
+            overrides = json.load(f)
+    except (ValueError, OSError) as exc:
+        logger.warning(f"Could not read {OVERRIDES_FILE.name}, ignoring live changes: {exc}")
+        return
+    searches = config.setdefault("searches", [])
+    by_name = {s.get("name"): s for s in searches}
+    for name, fields in overrides.get("searches", {}).items():
+        if name in by_name:
+            by_name[name].update({k: v for k, v in fields.items() if k in _OVERRIDE_FIELDS})
+    for added in overrides.get("added_searches", []):
+        if added.get("name") not in by_name:
+            searches.append(added)
+
+
+# Saves live changes as the difference between the given config and config.json
+# on disk, so config.json itself is never written at runtime.
+def save_config_overrides(config: dict) -> None:
+    with CONFIG_FILE.open(encoding="utf-8") as f:
+        base = {s.get("name"): s for s in json.load(f).get("searches", [])}
+    changed, added = {}, []
+    for search in config.get("searches", []):
+        original = base.get(search.get("name"))
+        if original is None:
+            added.append(search)
+            continue
+        diff = {
+            k: search.get(k, default)
+            for k, default in _OVERRIDE_FIELDS.items()
+            if search.get(k, default) != original.get(k, default)
+        }
+        if diff:
+            changed[search["name"]] = diff
+    OVERRIDES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = OVERRIDES_FILE.with_suffix(".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
+        json.dump({"searches": changed, "added_searches": added}, f, indent=2, ensure_ascii=False)
+    tmp.replace(OVERRIDES_FILE)
 
 
 # ---------------------------------------------------------------------------
@@ -363,8 +400,14 @@ def check_search(
             seen.add(listing.listing_id)
 
         logger.info(f"Good deal found: {listing.title} — {listing.price}€ ({name})")
-        notify_new_listing(tg_config, listing, name)
-        new_count += 1
+        if notify_new_listing(tg_config, listing, name):
+            new_count += 1
+        else:
+            # Telegram unreachable — forget the listing so the next cycle tries again
+            with _seen_lock:
+                seen.discard(listing.listing_id)
+                seen.discard(key)
+            logger.warning(f"Notification for listing {listing.listing_id} failed — retrying next cycle")
 
     if seen_changed:
         with _seen_lock:
