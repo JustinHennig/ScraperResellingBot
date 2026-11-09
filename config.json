@@ -10,26 +10,29 @@
         "pro"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 12 Mini",
       "query": "iphone 12 mini",
-      "max_price": 85,
+      "max_price": 70,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 12 Pro",
       "query": "iphone 12 pro",
-      "max_price": 140,
+      "max_price": 120,
       "min_price": 35,
       "keywords_blocked": [
         "max"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 12 Pro Max",
@@ -37,19 +40,21 @@
       "max_price": 170,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 13",
       "query": "iphone 13",
-      "max_price": 130,
+      "max_price": 110,
       "min_price": 35,
       "keywords_blocked": [
         "mini",
         "pro"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 13 Mini",
@@ -57,7 +62,8 @@
       "max_price": 130,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 13 Pro",
@@ -68,7 +74,8 @@
         "max"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 13 Pro Max",
@@ -76,19 +83,21 @@
       "max_price": 260,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 14",
       "query": "iphone 14",
-      "max_price": 200,
+      "max_price": 170,
       "min_price": 35,
       "keywords_blocked": [
         "plus",
         "pro"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 14 Plus",
@@ -96,38 +105,42 @@
       "max_price": 225,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 14 Pro",
       "query": "iphone 14 pro",
-      "max_price": 290,
+      "max_price": 230,
       "min_price": 35,
       "keywords_blocked": [
         "max"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 14 Pro Max",
       "query": "iphone 14 pro max",
-      "max_price": 340,
+      "max_price": 300,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 15",
       "query": "iphone 15",
-      "max_price": 280,
+      "max_price": 250,
       "min_price": 35,
       "keywords_blocked": [
         "plus",
         "pro"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 15 Plus",
@@ -135,18 +148,20 @@
       "max_price": 290,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 15 Pro",
       "query": "iphone 15 pro",
-      "max_price": 350,
+      "max_price": 320,
       "min_price": 35,
       "keywords_blocked": [
         "max"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 15 Pro Max",
@@ -154,12 +169,13 @@
       "max_price": 420,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 16",
       "query": "iphone 16",
-      "max_price": 420,
+      "max_price": 400,
       "min_price": 35,
       "keywords_blocked": [
         "plus",
@@ -167,7 +183,8 @@
         "16e"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 16 Plus",
@@ -175,7 +192,8 @@
       "max_price": 440,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 16 Pro",
@@ -186,7 +204,8 @@
         "max"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 16 Pro Max",
@@ -194,7 +213,8 @@
       "max_price": 530,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 16e",
@@ -202,31 +222,42 @@
       "max_price": 320,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 17",
       "query": "iphone 17",
-      "max_price": 600,
+      "max_price": 650,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple",
+      "keywords_blocked": [
+        "pro",
+        "air"
+      ]
     },
     {
       "name": "iPhone 17 Pro",
       "query": "iphone 17 pro",
       "max_price": 800,
-      "min_price": 35,
-      "enabled": true,
-      "category_id": 163
+      "min_price": 30,
+      "enabled": false,
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple",
+      "keywords_blocked": [
+        "max"
+      ]
     },
     {
       "name": "iPhone 17 Pro Max",
       "query": "iphone 17 pro max",
       "max_price": 900,
       "min_price": 35,
-      "enabled": true,
-      "category_id": 163
+      "enabled": false,
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "iPhone 17e",
@@ -234,7 +265,8 @@
       "max_price": 500,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:apple"
     },
     {
       "name": "Samsung A54",
@@ -242,7 +274,8 @@
       "max_price": 85,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung A55",
@@ -250,7 +283,8 @@
       "max_price": 90,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S21",
@@ -263,7 +297,8 @@
         "plus"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S21 FE",
@@ -271,7 +306,8 @@
       "max_price": 80,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S21 Plus",
@@ -283,7 +319,8 @@
         "ultra"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S21 Ultra",
@@ -291,19 +328,21 @@
       "max_price": 130,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S22",
       "query": "samsung s22",
-      "max_price": 110,
+      "max_price": 90,
       "min_price": 35,
       "keywords_blocked": [
         "ultra",
         "plus"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S22 Plus",
@@ -314,7 +353,8 @@
         "ultra"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S22 Ultra",
@@ -322,7 +362,8 @@
       "max_price": 190,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S23",
@@ -335,7 +376,8 @@
         "plus"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S23 FE",
@@ -343,7 +385,8 @@
       "max_price": 130,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S23 Plus",
@@ -355,7 +398,8 @@
         "ultra"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S23 Ultra",
@@ -363,12 +407,13 @@
       "max_price": 250,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S24",
       "query": "samsung s24",
-      "max_price": 280,
+      "max_price": 210,
       "min_price": 35,
       "keywords_blocked": [
         "fe",
@@ -376,7 +421,8 @@
         "plus"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S24 FE",
@@ -384,40 +430,45 @@
       "max_price": 200,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S24 Plus",
       "query": "samsung s24 plus",
-      "max_price": 330,
+      "max_price": 300,
       "min_price": 35,
       "keywords_blocked": [
         "fe",
         "ultra"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S24 Ultra",
       "query": "samsung s24 ultra",
-      "max_price": 400,
+      "max_price": 350,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S25",
       "query": "samsung s25",
-      "max_price": 380,
+      "max_price": 350,
       "min_price": 35,
       "keywords_blocked": [
         "fe",
         "ultra",
-        "plus"
+        "plus",
+        "edge"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S25 FE",
@@ -425,7 +476,8 @@
       "max_price": 290,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S25 Plus",
@@ -437,15 +489,17 @@
         "ultra"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Samsung S25 Ultra",
       "query": "samsung s25 ultra",
-      "max_price": 570,
+      "max_price": 520,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:samsung_handy"
     },
     {
       "name": "Google Pixel 7",
@@ -457,7 +511,8 @@
         "7a"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 7a",
@@ -465,7 +520,8 @@
       "max_price": 90,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 7 Pro",
@@ -473,7 +529,8 @@
       "max_price": 120,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 8",
@@ -486,7 +543,8 @@
         "8a"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 8a",
@@ -494,7 +552,8 @@
       "max_price": 130,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 8 Pro",
@@ -502,7 +561,8 @@
       "max_price": 200,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 9",
@@ -515,7 +575,8 @@
         "9a"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 9a",
@@ -523,7 +584,8 @@
       "max_price": 200,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 9 Pro",
@@ -534,20 +596,22 @@
         "xl"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 9 Pro XL",
       "query": "pixel 9 pro xl",
-      "max_price": 400,
+      "max_price": 350,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 10",
       "query": "pixel 10",
-      "max_price": 500,
+      "max_price": 350,
       "min_price": 35,
       "keywords_blocked": [
         "pro",
@@ -555,7 +619,8 @@
         "10a"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 10a",
@@ -563,34 +628,36 @@
       "max_price": 280,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 10 Pro",
       "query": "pixel 10 pro",
-      "max_price": 600,
+      "max_price": 450,
       "min_price": 35,
       "keywords_blocked": [
         "xl"
       ],
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Google Pixel 10 Pro XL",
       "query": "pixel 10 pro xl",
-      "max_price": 400,
+      "max_price": 500,
       "min_price": 35,
       "enabled": true,
-      "category_id": 163
+      "category_id": 173,
+      "category_filter": "handy_telekom.art_s:google_handy"
     },
     {
       "name": "Raspberry Pi 5",
       "query": "raspberry pi 5",
-      "max_price": 90,
+      "max_price": 80,
       "min_price": 25,
-      "enabled": true,
-      "category_id": 224
+      "enabled": true
     }
   ],
   "settings": {
@@ -600,28 +667,74 @@
     "log_file": "logs/bot.log",
     "pricer_api_url": "http://localhost:8000",
     "keywords_blocked": [
-      "defekt",
       "bastler",
       "ersatzteil",
       "reparatur",
-      "gebrochen",
       "gesperrt",
-      "icloud",
       "wasserschaden",
+      "platinenschaden",
+      "kein versand",
+      "nur abholung",
+      "chinesische version",
+      "china version",
+      "asia version",
+      "replika",
+      "icloud gesperrt",
+      "icloud sperre",
+      "icloud-sperre",
+      "icloudsperre",
+      "icloud lock",
+      "icloud-lock",
+      "aktivierungssperre",
+      "ohne display"
+    ],
+    "defect_keywords": [
+      "defekt",
+      "gebrochen",
       "displayschaden",
       "sprung",
       "touchscreen defekt",
-      "platinenschaden",
-      "kein versand",
-      "nur abholung"
-    ]
+      "displayriss",
+      "display riss",
+      "riss im display",
+      "gerissen",
+      "riss",
+      "risse",
+      "haarriss",
+      "pixelfehler",
+      "pixel fehler",
+      "pixel-fehler",
+      "pixelausfall",
+      "tote pixel",
+      "toter pixel",
+      "toten pixel",
+      "dead pixel",
+      "schwarze fleck",
+      "schwarzer fleck",
+      "schwarzen fleck",
+      "schwarze punkt",
+      "schwarzer punkt",
+      "schwarzen punkt",
+      "displayfleck",
+      "fleck im display",
+      "flecken im display",
+      "fleck auf dem display",
+      "flecken auf dem display",
+      "beschädig",
+      "kaputt",
+      "schaden",
+      "schäden",
+      "glasbruch",
+      "displaybruch",
+      "splitter",
+      "gebläht",
+      "geblaeht",
+      "aufgequollen",
+      "gequollen",
+      "akku tot"
+    ],
+    "defect_discount_percent": 30,
+    "new_seller_max_age_days": 5
   },
-  "whatsapp": {
-    "token": "EAAdohj4yidYBRNMSzWaZCO2VP67E8SNydTXAo3g1oHdVZAFMLU5Pry8aZAab2FbVnFQAjxUmPE9AlGSHYx8aTGKuH9DB98hY3IWEYXZCGotBCEfZAAZB3JIBwRav5rLWP4NbCacZAVvI0TgCXPnp8j0r0lagkn3oiHDiViXi4EelKZAY4lh301ZAi1OBpp7FKVQZDZD",
-    "phone_number_id": "1045411721989479",
-    "recipient": [
-      "4915906011396",
-      "4915115896523"
-    ]
-  }
+  "telegram": {}
 }

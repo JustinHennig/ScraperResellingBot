@@ -1,95 +1,85 @@
-# WhatsApp notification helpers: formats listing data and delivers messages
-# via the Meta WhatsApp Cloud API (v22.0).
+# Telegram notification helpers: formats listing data and delivers messages
+# via the Telegram Bot API.
 import logging
 import requests
+from bot.ratings import record_listing
 from bot.scraper import Listing
 
 logger = logging.getLogger(__name__)
 
-WA_API_URL = "https://graph.facebook.com/v22.0"
+TG_API_URL = "https://api.telegram.org/bot"
+
+# Battery health (in %) below which the notification shows a 🔋 warning
+BATTERY_WARN_BELOW = 80
 
 
-# Sends a WhatsApp text message via the Meta Cloud API.
-# recipient can be a single number string or a list of number strings.
-def send_whatsapp_message(wa_config: dict, body: str) -> bool:
-    token = wa_config["token"]
-    phone_number_id = wa_config["phone_number_id"]
-    raw = wa_config["recipient"]
-    recipients = raw if isinstance(raw, list) else [raw]
+# Normalizes tg_config["chat_id"] (single id or list) into a list of strings.
+def _chat_ids(tg_config: dict) -> list[str]:
+    raw = tg_config.get("chat_id", [])
+    ids = raw if isinstance(raw, list) else [raw]
+    return [str(c) for c in ids if c]
+
+
+# Sends a Telegram text message via the Bot API.
+# chat_id can be a single id or a list of ids.
+def send_telegram_message(tg_config: dict, body: str, reply_markup: dict | None = None) -> bool:
+    token = tg_config["bot_token"]
+
+    payload_base = {"text": body}
+    if reply_markup is not None:
+        payload_base["reply_markup"] = reply_markup
 
     success = True
-    for recipient in recipients:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": recipient,
-            "type": "text",
-            "text": {"body": body},
-        }
+    for chat_id in _chat_ids(tg_config):
         try:
             response = requests.post(
-                f"{WA_API_URL}/{phone_number_id}/messages",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+                f"{TG_API_URL}{token}/sendMessage",
+                json={"chat_id": chat_id, **payload_base},
                 timeout=10,
             )
             if response.status_code != 200:
-                logger.error(f"WhatsApp notification failed for {recipient}: HTTP {response.status_code} — {response.text[:200]}")
+                logger.error(f"Telegram notification failed for {chat_id}: HTTP {response.status_code} — {response.text[:200]}")
                 success = False
         except requests.RequestException as e:
-            logger.error(f"WhatsApp notification request failed for {recipient}: {e}")
+            logger.error(f"Telegram notification request failed for {chat_id}: {e}")
             success = False
     return success
 
 
-# Sends a WhatsApp image message with caption via the Meta Cloud API.
-# recipient can be a single number string or a list of number strings.
-def send_whatsapp_image(wa_config: dict, image_url: str, caption: str) -> bool:
-    token = wa_config["token"]
-    phone_number_id = wa_config["phone_number_id"]
-    raw = wa_config["recipient"]
-    recipients = raw if isinstance(raw, list) else [raw]
+# Sends a Telegram photo message with caption via the Bot API.
+# chat_id can be a single id or a list of ids.
+def send_telegram_photo(tg_config: dict, image_url: str, caption: str, reply_markup: dict | None = None) -> bool:
+    token = tg_config["bot_token"]
+
+    payload_base = {"photo": image_url, "caption": caption[:1024]}
+    if reply_markup is not None:
+        payload_base["reply_markup"] = reply_markup
 
     success = True
-    for recipient in recipients:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": recipient,
-            "type": "image",
-            "image": {
-                "link": image_url,
-                "caption": caption[:1024],  # WhatsApp caption limit
-            },
-        }
+    for chat_id in _chat_ids(tg_config):
         try:
             response = requests.post(
-                f"{WA_API_URL}/{phone_number_id}/messages",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+                f"{TG_API_URL}{token}/sendPhoto",
+                json={"chat_id": chat_id, **payload_base},
                 timeout=10,
             )
             if response.status_code != 200:
-                logger.warning(f"WhatsApp image send failed for {recipient}: HTTP {response.status_code} — {response.text[:200]}")
+                logger.warning(f"Telegram photo send failed for {chat_id}: HTTP {response.status_code} — {response.text[:200]}")
                 success = False
         except requests.RequestException as e:
-            logger.warning(f"WhatsApp image request failed for {recipient}: {e}")
+            logger.warning(f"Telegram photo request failed for {chat_id}: {e}")
             success = False
     return success
 
 
-# Returns formatted WhatsApp message body for a listing.
+# Returns formatted Telegram message body for a listing.
 def format_listing_message(listing: Listing, search_name: str) -> str:
     if listing.price is not None:
         price_str = f"{listing.price} EUR (VB)" if listing.negotiable else f"{listing.price} EUR"
     else:
         price_str = "Preis auf Anfrage"
 
-    lines = [f"*{search_name}: {listing.title}*"]
+    lines = [f"{search_name}: {listing.title}"]
 
     # AI score line, e.g. "⭐ Score: 8/10"
     if listing.ai_score is not None:
@@ -105,6 +95,18 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
             sell_line += f"  •  {profit_emoji} Gewinn: ~{listing.estimated_profit:+d} EUR"
         lines.append(sell_line)
 
+    # Defect that was let through because the price is low enough
+    if listing.defect_note:
+        lines.append(f"🔧 Defekt: {listing.defect_note}")
+
+    # Weak battery as stated in title/description
+    if listing.battery_capacity is not None and listing.battery_capacity < BATTERY_WARN_BELOW:
+        lines.append(f"🔋 Akku nur {listing.battery_capacity} %")
+
+    # Seller rating and account age from the detail page
+    if listing.seller_info:
+        lines.append(f"👤 {listing.seller_info}")
+
     # AI warning for non-original/modified parts
     if listing.ai_warning:
         lines.append(f"⚠️ {listing.ai_warning}")
@@ -119,36 +121,51 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
     return "\n".join(lines)
 
 
-# Sends a WhatsApp notification for a new listing, with image if available.
-def notify_new_listing(wa_config: dict, listing: Listing, search_name: str) -> bool:
+# Inline "👍 Kaufen" / "👎 Nicht kaufen" buttons attached to a listing notification.
+# Tapping one sends a callback_query the server's Telegram poll loop reacts to.
+def _rating_keyboard(listing_id: str) -> dict:
+    return {
+        "inline_keyboard": [[
+            {"text": "👍 Kaufen", "callback_data": f"rate:{listing_id}:up"},
+            {"text": "👎 Nicht kaufen", "callback_data": f"rate:{listing_id}:down"},
+        ]]
+    }
+
+
+# Sends a Telegram notification for a new listing, with photo if available,
+# and a 👍/👎 rating keyboard so the recipient can flag whether they'd buy it.
+def notify_new_listing(tg_config: dict, listing: Listing, search_name: str) -> bool:
     body = format_listing_message(listing, search_name)
+    keyboard = _rating_keyboard(listing.listing_id)
 
     if listing.image_url:
-        success = send_whatsapp_image(wa_config, listing.image_url, body)
+        success = send_telegram_photo(tg_config, listing.image_url, body, reply_markup=keyboard)
         if success:
-            logger.info(f"Notification (image) sent for listing {listing.listing_id}: {listing.title}")
+            logger.info(f"Notification (photo) sent for listing {listing.listing_id}: {listing.title}")
+            record_listing(listing.listing_id, listing.title, listing.price, listing.url, search_name)
             return True
-        # Fall back to text if image send fails
-        logger.warning(f"Image send failed for {listing.listing_id}, falling back to text")
+        # Fall back to text if photo send fails
+        logger.warning(f"Photo send failed for {listing.listing_id}, falling back to text")
 
-    success = send_whatsapp_message(wa_config, body)
+    success = send_telegram_message(tg_config, body, reply_markup=keyboard)
     if success:
         logger.info(f"Notification (text) sent for listing {listing.listing_id}: {listing.title}")
+        record_listing(listing.listing_id, listing.title, listing.price, listing.url, search_name)
     return success
 
 
-# Sends a startup confirmation WhatsApp message.
-def send_startup_message(wa_config: dict, search_names: list[str]) -> None:
+# Sends a startup confirmation Telegram message.
+def send_startup_message(tg_config: dict, search_names: list[str]) -> None:
     names_str = ", ".join(search_names)
-    send_whatsapp_message(wa_config, f"✅ Reselling Bot gestartet\nAktive Suchen: {names_str}")
+    send_telegram_message(tg_config, f"✅ Reselling Bot gestartet\nAktive Suchen: {names_str}")
 
 
-# Checks that all required WhatsApp config fields are present.
-def validate_whatsapp_config(wa_config: dict) -> bool:
-    required = ["token", "phone_number_id", "recipient"]
+# Checks that all required Telegram config fields are present.
+def validate_telegram_config(tg_config: dict) -> bool:
+    required = ["bot_token", "chat_id"]
     for field in required:
-        if not wa_config.get(field):
-            logger.error(f"WhatsApp config fehlt: '{field}' in config.json unter 'whatsapp' eintragen.")
+        if not tg_config.get(field):
+            logger.error(f"Telegram config fehlt: '{field}' in config.json unter 'telegram' eintragen.")
             return False
-    logger.info("WhatsApp config OK.")
+    logger.info("Telegram config OK.")
     return True

@@ -1,7 +1,7 @@
 # Orchestration layer: loads config and seen listings, runs all searches in parallel,
-# and coordinates notifications via WhatsApp.
+# and coordinates notifications via Telegram.
 # Configuration is read from config.json (see bot/scraper.py for scraping logic,
-# bot/notifier.py for WhatsApp delivery).
+# bot/notifier.py for Telegram delivery).
 
 import json
 import logging
@@ -17,9 +17,17 @@ from typing import Optional
 import requests
 import schedule
 
-from bot.notifier import notify_new_listing, send_startup_message, validate_whatsapp_config
-from bot.scraper import Listing, fetch_listings, fetch_listing_details, is_good_deal
-from bot.ai_scorer import score_listing
+from bot.notifier import notify_new_listing, send_startup_message, validate_telegram_config
+from bot.scraper import (
+    Listing,
+    fetch_listing_details,
+    fetch_listings,
+    find_battery_capacity,
+    find_defects,
+    is_good_deal,
+    is_new_seller,
+)
+from bot.ai_scorer import score_listing, payment_red_flag
 
 CONFIG_FILE = Path(__file__).parent.parent / "config.json"
 CREDENTIALS_FILE = Path(__file__).parent.parent / "credentials.json"
@@ -95,13 +103,30 @@ def load_config() -> dict:
         # Merge groq_api_key into settings
         if creds.get("groq_api_key"):
             config.setdefault("settings", {})["groq_api_key"] = creds["groq_api_key"]
-        # Merge whatsapp block (deep merge — credentials values win)
-        if creds.get("whatsapp"):
-            config.setdefault("whatsapp", {}).update(
-                {k: v for k, v in creds["whatsapp"].items() if v}
+        # Merge telegram block (deep merge — credentials values win)
+        if creds.get("telegram"):
+            config.setdefault("telegram", {}).update(
+                {k: v for k, v in creds["telegram"].items() if v}
             )
 
     return config
+
+
+# Returns a copy of the config without the values load_config merged in from
+# credentials.json, so writing the config back never leaks tokens into
+# config.json (which is tracked by git).
+def config_without_credentials(config: dict) -> dict:
+    stripped = json.loads(json.dumps(config))
+    if not CREDENTIALS_FILE.exists():
+        return stripped
+    with CREDENTIALS_FILE.open(encoding="utf-8") as f:
+        creds = json.load(f)
+    if creds.get("groq_api_key"):
+        stripped.get("settings", {}).pop("groq_api_key", None)
+    for key, value in (creds.get("telegram") or {}).items():
+        if value:
+            stripped.get("telegram", {}).pop(key, None)
+    return stripped
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +134,12 @@ def load_config() -> dict:
 # ---------------------------------------------------------------------------
 
 SEEN_MAX_AGE_DAYS = 7  # IDs older than this are removed from seen_listings.json
+
+
+# Seen-set key for a listing checked by one search ("iPhone 13|3553249207").
+# Plain listing IDs in the same set mark listings already notified by any search.
+def _seen_key(search_name: str, listing_id: str) -> str:
+    return f"{search_name}|{listing_id}"
 
 
 # Loads previously seen listing IDs from disk, pruning entries older than SEEN_MAX_AGE_DAYS.
@@ -177,12 +208,16 @@ def save_seen_listings(path: str, seen: set[str]) -> None:
 def check_search(
     search_config: dict,
     seen: set[str],
-    wa_config: dict,
+    tg_config: dict,
     seen_file: str,
     global_blocked: list[str],
     stop_event,
     groq_api_key: str = "",
     pricer_api_url: str = "",
+    ai_score_skip_threshold: int = 2,
+    defect_keywords: Optional[list[str]] = None,
+    defect_discount_percent: int = 30,
+    new_seller_max_age_days: int = 5,
 ) -> None:
     name = search_config.get("name", search_config.get("query", "?"))
     query = search_config.get("query", "")
@@ -192,52 +227,62 @@ def check_search(
 
     min_price = search_config.get("min_price")
     max_price = search_config.get("max_price")
+    category_id = search_config.get("category_id")
+    category_filter = search_config.get("category_filter", "")
 
     logger.info(f"Checking search: '{name}'")
     cutoff = datetime.now() - timedelta(minutes=30)
 
-    # Fetch pages until we hit a known listing ID (everything after it is already seen),
-    # all listings on a page are older than 30 minutes, or we reach the 3-page cap.
+    # Fetch pages (newest first) until a page reaches listings this search has
+    # already checked or that are older than 30 minutes, or we hit the 3-page cap.
+    # Paid TOP ads carry no date and stay pinned above the newest results, so
+    # only dated listings decide when to stop — otherwise a known TOP ad at the
+    # top would end the search before any new listing is looked at.
     listings = []
     for page in range(3):
         if stop_event.is_set():
             return
-        page_listings = fetch_listings(query, page=page, min_price=min_price, max_price=max_price)
-        if not page_listings:
-            break
-        # Stop if we hit a listing we've already processed — it and everything after it
-        # is old news since results are sorted newest-first.
-        hit_seen = False
-        for pl in page_listings:
-            with _seen_lock:
-                if pl.listing_id in seen:
-                    hit_seen = True
-                    break
-            listings.append(pl)
-        if hit_seen:
-            logger.debug(f"Stopping pagination for '{name}' — hit already-seen listing on page {page + 1}")
-            break
-        # Also stop if every dated listing on this page is older than the cutoff
-        dated = [l for l in page_listings if l.posted_at is not None]
-        if dated and all(l.posted_at is not None and l.posted_at < cutoff for l in dated):
-            break
         if page > 0:
             time.sleep(1)
+        page_listings = fetch_listings(query, page, min_price, max_price, category_id, category_filter)
+        if not page_listings:
+            break
+        listings.extend(page_listings)
+        dated = [l for l in page_listings if l.posted_at is not None]
+        with _seen_lock:
+            reached_seen = any(_seen_key(name, l.listing_id) in seen for l in dated)
+        if reached_seen or not dated or any(l.posted_at < cutoff for l in dated):
+            break
 
     new_count = 0
+    checked_count = 0
+    seen_changed = False
 
     for listing in listings:
         if stop_event.is_set():
-            return
+            break
 
+        # Each search keeps its own seen entries: a listing that search
+        # "iPhone 13" rejects as a Pro model must still be checked by search
+        # "iPhone 13 Pro". Duplicate notifications are prevented separately below.
+        key = _seen_key(name, listing.listing_id)
         with _seen_lock:
-            if listing.listing_id in seen:
+            if key in seen:
                 continue
-            # Reserve the ID immediately so another thread doesn't process the same listing
-            seen.add(listing.listing_id)
+            seen.add(key)
+            seen_changed = True
+            already_notified = listing.listing_id in seen
+        checked_count += 1
+
+        logger.info(f"Listing {listing.listing_id} '{listing.title}' — {listing.price}€ ({name})")
 
         # Filter: ignore listings older than 30 minutes
         if listing.posted_at is not None and listing.posted_at < cutoff:
+            logger.info(f"Skipped listing {listing.listing_id}: older than 30 minutes (posted {listing.posted_at:%d.%m. %H:%M})")
+            continue
+
+        if already_notified:
+            logger.info(f"Skipped listing {listing.listing_id}: already notified by another search")
             continue
 
         good, reason = is_good_deal(listing, search_config, global_blocked)
@@ -246,18 +291,32 @@ def check_search(
             continue
 
         if stop_event.is_set():
-            return
+            break
 
-        # Fetch detail page for full description
-        full_desc, _ = fetch_listing_details(listing.url)
+        # Fetch detail page for full description, seller join date and seller rating
+        full_desc, join_date, listing.seller_info = fetch_listing_details(listing.url)
+        if full_desc:
+            listing.description = full_desc
+        listing.battery_capacity = find_battery_capacity(listing)
+
+        # Skip sellers whose account was created today or yesterday (likely scammers)
+        if is_new_seller(join_date, new_seller_max_age_days):
+            logger.info(f"Skipped listing {listing.listing_id}: new seller account (aktiv seit {join_date:%d.%m.%Y})")
+            continue
 
         # Re-run keyword check against the full description
         if full_desc:
-            listing.description = full_desc
             good, reason = is_good_deal(listing, search_config, global_blocked)
             if not good:
                 logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
                 continue
+
+        # Payment red flags (PayPal Freunde, nur Überweisung) — no buyer protection,
+        # skip outright regardless of whether a Groq key is configured.
+        flag = payment_red_flag(f"{listing.title} {listing.description or ''}")
+        if flag:
+            logger.info(f"Skipped listing {listing.listing_id}: {flag}")
+            continue
 
         # Fetch estimated eBay sell price from PricerBot API
         if pricer_api_url:
@@ -268,21 +327,50 @@ def check_search(
             if median_price is not None:
                 logger.info(f"Price estimate for '{name}': median {median_price:.0f} EUR, profit ~{listing.estimated_profit} EUR")
 
+        # Defective devices (crack, dead pixels, "defekt" …) are only worth it when
+        # they're at least defect_discount_percent below the search's max_price.
+        defects = find_defects(listing, defect_keywords or [])
+        if defects:
+            discount = round(100 * (1 - listing.price / max_price)) if max_price else None
+            if discount is None or discount < defect_discount_percent:
+                logger.info(
+                    f"Skipped listing {listing.listing_id}: defect ({', '.join(defects)}) but only "
+                    f"{discount}% below max price ({max_price} EUR), need {defect_discount_percent}%"
+                )
+                continue
+            listing.defect_note = f"{', '.join(defects)} — {discount}% unter Höchstpreis der Suche ({max_price} EUR)"
+            logger.info(f"Listing {listing.listing_id} has a defect but is cheap enough: {listing.defect_note}")
+
         # AI scoring — only runs if a Groq API key is configured
         if groq_api_key:
-            score, warning = score_listing(listing, groq_api_key)
+            score, warning = score_listing(listing, groq_api_key, name)
             listing.ai_score = score
             listing.ai_warning = warning
             logger.info(f"AI score for {listing.listing_id}: {score}/10 — warning: '{warning}'")
 
-        logger.info(f"Good deal found: {listing.title} — {listing.price}€")
-        notify_new_listing(wa_config, listing, name)
+            # Auto-skip clear rejects (e.g. counterfeit/grey-market devices) instead
+            # of just displaying a low score — borderline scores still get sent so
+            # they can be 👍/👎-rated.
+            if score is not None and score <= ai_score_skip_threshold:
+                logger.info(f"Skipped listing {listing.listing_id} — AI score {score}/10 too low: {warning}")
+                continue
+
+        # Reserve the plain listing ID so a parallel search can't notify the same listing again
+        with _seen_lock:
+            if listing.listing_id in seen:
+                logger.info(f"Skipped listing {listing.listing_id}: already notified by another search")
+                continue
+            seen.add(listing.listing_id)
+
+        logger.info(f"Good deal found: {listing.title} — {listing.price}€ ({name})")
+        notify_new_listing(tg_config, listing, name)
         new_count += 1
 
-    with _seen_lock:
-        save_seen_listings(seen_file, seen)
+    if seen_changed:
+        with _seen_lock:
+            save_seen_listings(seen_file, seen)
     logger.info(
-        f"Search '{name}' done. {len(listings)} listings checked, {new_count} notifications sent."
+        f"Search '{name}' done. {checked_count} listings checked, {new_count} notifications sent."
     )
 
 
@@ -291,18 +379,25 @@ def run_all_searches(config: dict, seen: set[str], stop_event=None) -> None:
     import threading
     if stop_event is None:
         stop_event = threading.Event()  # never-set fallback for main.py standalone use
-    wa_config = config["whatsapp"]
+    tg_config = config["telegram"]
     seen_file = config["settings"].get("seen_listings_file", "seen_listings.json")
     global_blocked = config["settings"].get("keywords_blocked", [])
     max_workers = config["settings"].get("max_workers", 6)
     groq_api_key = config["settings"].get("groq_api_key", "")
     pricer_api_url = config["settings"].get("pricer_api_url", "")
+    ai_score_skip_threshold = config["settings"].get("ai_score_skip_threshold", 2)
+    defect_keywords = config["settings"].get("defect_keywords", [])
+    defect_discount_percent = config["settings"].get("defect_discount_percent", 30)
+    new_seller_max_age_days = config["settings"].get("new_seller_max_age_days", 5)
 
     active_searches = [s for s in config.get("searches", []) if s.get("enabled", True)]
 
     def _run(search):
         try:
-            check_search(search, seen, wa_config, seen_file, global_blocked, stop_event, groq_api_key, pricer_api_url)
+            check_search(
+                search, seen, tg_config, seen_file, global_blocked, stop_event, groq_api_key, pricer_api_url,
+                ai_score_skip_threshold, defect_keywords, defect_discount_percent, new_seller_max_age_days,
+            )
         except Exception as e:
             logger.error(
                 f"Unexpected error in search '{search.get('name')}': {e}\n"
@@ -329,10 +424,10 @@ def main() -> None:
     global logger
     logger = logging.getLogger("main")
 
-    wa_config = config.get("whatsapp", {})
+    tg_config = config.get("telegram", {})
 
-    if not validate_whatsapp_config(wa_config):
-        logger.error("WhatsApp nicht konfiguriert. Bot wird nicht gestartet.")
+    if not validate_telegram_config(tg_config):
+        logger.error("Telegram nicht konfiguriert. Bot wird nicht gestartet.")
         sys.exit(1)
 
     seen_file = settings.get("seen_listings_file", "seen_listings.json")
@@ -345,7 +440,7 @@ def main() -> None:
         for s in config.get("searches", [])
         if s.get("enabled", True)
     ]
-    send_startup_message(wa_config, active_names)
+    send_startup_message(tg_config, active_names)
 
     # Run immediately on start, then on schedule
     run_all_searches(config, seen)

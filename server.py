@@ -8,10 +8,21 @@ import logging
 import threading
 import time
 from datetime import datetime
+from typing import Optional
 
+import requests
 from flask import Flask, jsonify, render_template, request
 
-from bot.main import CONFIG_FILE, load_config, load_seen_listings, run_all_searches, setup_logging
+from bot.main import (
+    CONFIG_FILE,
+    config_without_credentials,
+    load_config,
+    load_seen_listings,
+    run_all_searches,
+    setup_logging,
+)
+from bot.notifier import send_telegram_message
+from bot.ratings import all_records, set_rating
 
 app = Flask(
     __name__,
@@ -99,6 +110,12 @@ def log_page():
     return render_template("log.html")
 
 
+# Serves the ratings overview page.
+@app.route("/ratings")
+def ratings_page():
+    return render_template("ratings.html")
+
+
 # Returns current bot state: running flag, check interval, and seconds until the next run.
 @app.route("/api/status")
 def api_status():
@@ -109,29 +126,43 @@ def api_status():
     return jsonify(data)
 
 
-# Starts the bot loop in a background thread. Returns 409 if already running.
-@app.route("/api/start", methods=["POST"])
-def api_start():
+# Starts the bot loop in a background thread. Returns False if already running.
+def _start_bot() -> bool:
     global _bot_thread
     with _lock:
         if _state["running"]:
-            return jsonify({"ok": False, "error": "Already running"}), 409
+            return False
         _state["running"] = True
 
     _stop_event.clear()
     _bot_thread = threading.Thread(target=_bot_loop, daemon=True, name="bot-loop")
     _bot_thread.start()
+    return True
+
+
+# Signals the bot loop to stop. Returns False if not running.
+def _stop_bot() -> bool:
+    with _lock:
+        if not _state["running"]:
+            return False
+
+    _stop_event.set()
+    return True
+
+
+# Starts the bot loop in a background thread. Returns 409 if already running.
+@app.route("/api/start", methods=["POST"])
+def api_start():
+    if not _start_bot():
+        return jsonify({"ok": False, "error": "Already running"}), 409
     return jsonify({"ok": True})
 
 
 # Signals the bot loop to stop. Returns 409 if not running.
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
-    with _lock:
-        if not _state["running"]:
-            return jsonify({"ok": False, "error": "Not running"}), 409
-
-    _stop_event.set()
+    if not _stop_bot():
+        return jsonify({"ok": False, "error": "Not running"}), 409
     return jsonify({"ok": True})
 
 
@@ -173,10 +204,11 @@ def api_searches():
 
 
 # Write _config back to config.json atomically. Must be called under _lock.
+# Credentials merged in from credentials.json are left out so they never end up in config.json.
 def _save_config() -> None:
     tmp = CONFIG_FILE.with_suffix(".tmp")
     with tmp.open("w", encoding="utf-8") as f:
-        json.dump(_config, f, indent=2, ensure_ascii=False)
+        json.dump(config_without_credentials(_config), f, indent=2, ensure_ascii=False)
     try:
         tmp.replace(CONFIG_FILE)
     except PermissionError:
@@ -308,7 +340,10 @@ def api_seen_clear():
     if was_running:
         _stop_event.set()
         if _bot_thread:
-            _bot_thread.join(timeout=15)
+            _bot_thread.join(timeout=60)
+            # Restarting while the old loop is still finishing would leave two loops running
+            if _bot_thread.is_alive():
+                return jsonify({"ok": False, "error": "Bot is still stopping — please try again in a moment"}), 409
 
     with _lock:
         _seen.clear()
@@ -346,6 +381,27 @@ def api_logs():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# Returns every notified listing with its 👍/👎 ratings, newest first.
+@app.route("/api/ratings")
+def api_ratings():
+    records = []
+    for listing_id, rec in all_records().items():
+        ratings = rec.get("ratings", {})
+        latest = max(ratings.values(), key=lambda r: r.get("rated_at", ""), default=None)
+        records.append({
+            "listing_id": listing_id,
+            "title": rec.get("title", ""),
+            "price": rec.get("price"),
+            "url": rec.get("url", ""),
+            "search_name": rec.get("search_name", ""),
+            "notified_at": rec.get("notified_at", ""),
+            "rating": latest.get("rating") if latest else None,
+            "rated_at": latest.get("rated_at") if latest else None,
+        })
+    records.sort(key=lambda r: r["notified_at"], reverse=True)
+    return jsonify({"records": records})
+
+
 # Clears the bot log file.
 @app.route("/api/logs/clear", methods=["POST"])
 def api_logs_clear():
@@ -358,6 +414,220 @@ def api_logs_clear():
     return jsonify({"ok": True})
 
 
+# ---------------------------------------------------------------------------
+# Telegram polling — lets a recognised chat control the bot by texting it
+# (stop/start/status), instead of needing the web dashboard. Uses long
+# polling (getUpdates) rather than a webhook, so no public HTTPS endpoint
+# is required — works fine behind a home router / NAT.
+# ---------------------------------------------------------------------------
+
+_COMMANDS_HELP = (
+    "Befehle:\n"
+    "• stop / pause — Bot anhalten\n"
+    "• start / weiter — Bot fortsetzen\n"
+    "• status — aktueller Zustand\n"
+    "• liste — alle Suchen mit Preis & Status\n"
+    "• aktivieren <name> — Suche einschalten\n"
+    "• deaktivieren <name> — Suche ausschalten\n"
+    "• preis <name> <min> <max> — Preisspanne setzen"
+)
+
+
+def _allowed_chat_ids(tg_config: dict) -> set[str]:
+    raw = tg_config.get("chat_id", [])
+    ids = raw if isinstance(raw, list) else [raw]
+    return {str(c) for c in ids if c}
+
+
+# Case-insensitive lookup of a search entry by name. Must be called under _lock.
+def _find_search(name: str) -> Optional[dict]:
+    name_low = name.strip().lower()
+    for s in _config.get("searches", []):
+        if s.get("name", "").lower() == name_low:
+            return s
+    return None
+
+
+# Renders the current searches as a Telegram-friendly list.
+def _format_search_list() -> str:
+    with _lock:
+        searches = _config.get("searches", [])
+        lines = [
+            f"{'✅' if s.get('enabled', True) else '⏸️'} {s.get('name', '?')}: "
+            f"{s.get('min_price', 0)}–{s.get('max_price', 0)} EUR"
+            for s in searches
+        ]
+    return "\n".join(lines) if lines else "Keine Suchen konfiguriert."
+
+
+# Handles a tap on a listing's 👍/👎 rating button: records the rating,
+# dismisses the loading spinner on the sender's side, and replaces the
+# buttons with the confirmed choice so it can't be tapped twice.
+def _handle_rating_callback(token: str, callback_query: dict, allowed: set[str]) -> None:
+    cq_id = callback_query.get("id")
+    chat_id = str(callback_query.get("message", {}).get("chat", {}).get("id", ""))
+    message_id = callback_query.get("message", {}).get("message_id")
+    data_str = callback_query.get("data", "")
+
+    if chat_id not in allowed or not data_str.startswith("rate:"):
+        requests.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+                       json={"callback_query_id": cq_id}, timeout=10)
+        return
+
+    _, listing_id, rating = data_str.split(":", 2)
+    record = set_rating(listing_id, chat_id, rating)
+    label = "👍 Kaufen" if rating == "up" else "👎 Nicht kaufen"
+
+    requests.post(
+        f"https://api.telegram.org/bot{token}/answerCallbackQuery",
+        json={"callback_query_id": cq_id, "text": f"Gespeichert: {label}"},
+        timeout=10,
+    )
+    if record is not None:
+        requests.post(
+            f"https://api.telegram.org/bot{token}/editMessageReplyMarkup",
+            json={
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "reply_markup": {"inline_keyboard": [[{"text": f"✅ {label}", "callback_data": "noop"}]]},
+            },
+            timeout=10,
+        )
+
+
+# Background loop: long-polls Telegram for new messages and reacts to
+# stop/start/status commands from chat ids listed in telegram.chat_id.
+# Runs for the lifetime of the process, independent of whether the bot
+# loop itself is running.
+def _telegram_poll_loop() -> None:
+    logger = logging.getLogger("server")
+    offset = None
+
+    while True:
+        tg_config = _config.get("telegram", {})
+        token = tg_config.get("bot_token")
+        if not token:
+            time.sleep(30)
+            continue
+
+        params = {"timeout": 25}
+        if offset is not None:
+            params["offset"] = offset
+
+        try:
+            response = requests.get(
+                f"https://api.telegram.org/bot{token}/getUpdates",
+                params=params,
+                timeout=35,
+            )
+            data = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning(f"Telegram polling failed: {exc}")
+            time.sleep(10)
+            continue
+
+        if not data.get("ok"):
+            logger.warning(f"Telegram getUpdates error: {data}")
+            time.sleep(10)
+            continue
+
+        allowed = _allowed_chat_ids(tg_config)
+
+        for update in data.get("result", []):
+            offset = update["update_id"] + 1
+            # One bad update (network hiccup while replying, malformed callback data)
+            # must not kill this thread — commands and rating buttons would stop
+            # working until the next restart.
+            try:
+                _handle_update(token, update, allowed)
+            except Exception:
+                logger.exception(f"Failed to handle Telegram update {update.get('update_id')}")
+
+
+# Reacts to a single Telegram update: a rating button tap or a text command.
+def _handle_update(token: str, update: dict, allowed: set[str]) -> None:
+    if "callback_query" in update:
+        _handle_rating_callback(token, update["callback_query"], allowed)
+        return
+
+    message = update.get("message", {})
+    chat_id = str(message.get("chat", {}).get("id", ""))
+    text = (message.get("text") or "").strip().lower()
+
+    if not text or chat_id not in allowed:
+        return
+
+    reply_config = {"bot_token": token, "chat_id": [chat_id]}
+
+    if text in ("stop", "pause", "aus", "halt"):
+        if _stop_bot():
+            send_telegram_message(reply_config, "🛑 Bot gestoppt. Schreib 'start', um ihn wieder zu starten.")
+        else:
+            send_telegram_message(reply_config, "Der Bot lief schon nicht.")
+    elif text in ("start", "weiter", "an", "los"):
+        if _start_bot():
+            send_telegram_message(reply_config, "▶️ Bot gestartet.")
+        else:
+            send_telegram_message(reply_config, "Der Bot lief schon.")
+    elif text == "status":
+        with _lock:
+            running = _state["running"]
+            interval = _state["interval"]
+        state_str = "läuft" if running else "gestoppt"
+        send_telegram_message(reply_config, f"Status: {state_str} (Intervall: {interval} Min.)")
+    elif text == "liste":
+        send_telegram_message(reply_config, _format_search_list())
+    elif text.startswith("aktivieren "):
+        name = text[len("aktivieren "):].strip()
+        with _lock:
+            s = _find_search(name)
+            if s is None:
+                reply = f"Suche '{name}' nicht gefunden."
+            else:
+                s["enabled"] = True
+                try:
+                    _save_config()
+                    reply = f"✅ '{s['name']}' aktiviert."
+                except Exception as exc:
+                    reply = f"Fehler beim Speichern: {exc}"
+        send_telegram_message(reply_config, reply)
+    elif text.startswith("deaktivieren "):
+        name = text[len("deaktivieren "):].strip()
+        with _lock:
+            s = _find_search(name)
+            if s is None:
+                reply = f"Suche '{name}' nicht gefunden."
+            else:
+                s["enabled"] = False
+                try:
+                    _save_config()
+                    reply = f"⏸️ '{s['name']}' deaktiviert."
+                except Exception as exc:
+                    reply = f"Fehler beim Speichern: {exc}"
+        send_telegram_message(reply_config, reply)
+    elif text.startswith("preis "):
+        parts = text[len("preis "):].rsplit(maxsplit=2)
+        if len(parts) != 3 or not parts[1].isdigit() or not parts[2].isdigit():
+            send_telegram_message(reply_config, "Format: preis <name> <min> <max>")
+        else:
+            name, min_str, max_str = parts
+            with _lock:
+                s = _find_search(name)
+                if s is None:
+                    reply = f"Suche '{name}' nicht gefunden."
+                else:
+                    s["min_price"] = int(min_str)
+                    s["max_price"] = int(max_str)
+                    try:
+                        _save_config()
+                        reply = f"💰 '{s['name']}': {min_str}–{max_str} EUR"
+                    except Exception as exc:
+                        reply = f"Fehler beim Speichern: {exc}"
+            send_telegram_message(reply_config, reply)
+    else:
+        send_telegram_message(reply_config, _COMMANDS_HELP)
+
+
 if __name__ == "__main__":
     _config = load_config()
     settings = _config.get("settings", {})
@@ -368,5 +638,13 @@ if __name__ == "__main__":
 
     logger = logging.getLogger("server")
     logger.info("Starting web server — open http://localhost:5000")
+
+    threading.Thread(target=_telegram_poll_loop, daemon=True, name="telegram-poll").start()
+
+    # Start searching right away so a reboot, power cut or service restart doesn't
+    # leave the bot silently stopped until someone sends "start".
+    if settings.get("autostart", True):
+        _start_bot()
+        logger.info("Bot started automatically (settings.autostart)")
 
     app.run(host="0.0.0.0", port=5000, debug=False)

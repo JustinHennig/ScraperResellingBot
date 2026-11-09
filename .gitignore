@@ -1,4 +1,5 @@
 data/seen_listings.json
+data/ratings.json
 data/*.tmp
 logs/
 *.log

@@ -628,3 +628,78 @@ input:checked + .toggle-slider::before {
   font-size: 0.84rem;
   margin: 0;
 }
+
+/* -- Ratings page ---------------------------------------- */
+
+.ratings-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ratings-stat {
+  background: var(--card-inner);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.ratings-stat span {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.ratings-stat.up span { color: var(--green); }
+.ratings-stat.down span { color: var(--red); }
+
+.ratings-table-wrap {
+  background: var(--card-inner);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-md);
+  max-height: 65vh;
+  overflow: auto;
+}
+
+.ratings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.ratings-table th {
+  position: sticky;
+  top: 0;
+  background: var(--card-inner);
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-mid);
+}
+.ratings-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.ratings-table a {
+  color: var(--text);
+  text-decoration: none;
+}
+.ratings-table a:hover { color: var(--accent); }
+.ratings-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ratings-table .muted { color: var(--text-dim); white-space: nowrap; }
+.ratings-table .rating-icon { width: 28px; text-align: center; }
+
+.ratings-empty {
+  padding: 20px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .ratings-summary { grid-template-columns: repeat(2, 1fr); }
+}

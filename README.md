@@ -1,8 +1,8 @@
 # ResellingBot — Kleinanzeigen Monitor
 
-Überwacht Kleinanzeigen automatisch und sendet WhatsApp-Benachrichtigungen bei guten Wiederverkaufsangeboten für Smartphones. Unterstützt iPhone 12–16e, Samsung S21–S25 / A-Serie und Google Pixel 7–9.
+Überwacht Kleinanzeigen automatisch und sendet Telegram-Benachrichtigungen bei guten Wiederverkaufsangeboten für Smartphones. Unterstützt iPhone 12–16e, Samsung S21–S25 / A-Serie und Google Pixel 7–9.
 
-Benachrichtigungen werden über die **Meta WhatsApp Cloud API** versendet. Optional bewertet eine **Groq AI** (llama-3.3-70b-versatile) jedes Inserat mit einem Wiederverkaufscore (1–10) und warnt vor nicht-originalen Ersatzteilen.
+Benachrichtigungen werden über die **Telegram Bot API** versendet — inklusive Fernsteuerung (stop/start/status per Nachricht) ganz ohne öffentlich erreichbaren Webhook, da per Long Polling abgefragt wird. Optional bewertet eine **Groq AI** jedes Inserat mit einem Wiederverkaufscore (1–10) und warnt vor nicht-originalen Ersatzteilen.
 
 Die Oberfläche ist ein lokales Web-Dashboard — kein separates Tool notwendig.
 
@@ -23,17 +23,17 @@ Erstelle eine Datei `credentials.json` im Projektordner (wird von Git ignoriert)
 ```json
 {
   "groq_api_key": "dein-groq-api-key",
-  "whatsapp": {
-    "token": "dein-meta-access-token",
-    "phone_number_id": "deine-phone-number-id",
-    "recipient": ["4917612345678"]
+  "telegram": {
+    "bot_token": "dein-telegram-bot-token",
+    "chat_id": ["123456789"]
   }
 }
 ```
 
-- **WhatsApp**: Access Token und Phone Number ID erhältst du im [Meta Developer Portal](https://developers.facebook.com/) unter deiner WhatsApp Business App.
+- **Telegram Bot**: Bei [@BotFather](https://t.me/BotFather) in Telegram `/newbot` schicken, Namen vergeben — du bekommst den `bot_token`.
+- **chat_id**: Schick deinem neuen Bot irgendeine Nachricht, dann `https://api.telegram.org/bot<TOKEN>/getUpdates` im Browser öffnen — die `chat.id` steht in der Antwort. Alternativ Nachricht an [@userinfobot](https://t.me/userinfobot) schicken, um die eigene ID zu erfahren.
 - **Groq API Key**: Kostenlos auf [console.groq.com](https://console.groq.com) erstellen. Wenn kein Key angegeben wird, läuft der Bot ohne KI-Scoring.
-- `recipient` kann ein einzelner String oder eine Liste von Nummern sein (Ländervorwahl ohne `+`, z.B. `4917612345678`).
+- `chat_id` kann eine einzelne ID/String oder eine Liste von IDs sein — für mehrere Empfänger.
 
 ### 3. config.json anpassen
 
@@ -64,11 +64,11 @@ Erstelle eine Datei `credentials.json` im Projektordner (wird von Git ignoriert)
       "icloud"
     ]
   },
-  "whatsapp": {}
+  "telegram": {}
 }
 ```
 
-> Sensitive Felder (`token`, `phone_number_id`, `recipient`, `groq_api_key`) gehören in `credentials.json`, nicht in `config.json`.
+> Sensitive Felder (`bot_token`, `chat_id`, `groq_api_key`) gehören in `credentials.json`, nicht in `config.json`.
 
 ### 4. Bot starten
 
@@ -91,7 +91,9 @@ python server.py
 | `max_price`         | Maximaler Preis in € (0 = kein Limit)                | `130`             |
 | `min_price`         | Minimaler Preis in € (filtert Spam-Inserate)         | `35`              |
 | `keywords_required` | Alle Keywords müssen im Titel/Beschreibung vorkommen | `["256gb"]`       |
-| `keywords_blocked`  | Inserate mit diesen Keywords werden übersprungen     | `["mini", "pro"]` |
+| `keywords_blocked`  | Modellvarianten, die diese Suche ausschließt — zählen nur direkt am Modellnamen („iPhone 13 **Pro**“), nicht irgendwo in der Beschreibung | `["mini", "pro"]` |
+| `category_id`       | Kleinanzeigen-Kategorie (173 = Handy & Telekom)      | `173`             |
+| `category_filter`   | Zusatzfilter zur Kategorie, z.B. nur eine Marke      | `"handy_telekom.art_s:apple"` |
 | `enabled`           | Suche aktiviert/deaktiviert                          | `true`            |
 
 ### Einstellungen (`settings`)
@@ -102,8 +104,13 @@ python server.py
 | `max_workers`            | Parallele Such-Threads                                    | `6`                        |
 | `seen_listings_file`     | Pfad zur Datei mit bereits gesehenen IDs                  | `data/seen_listings.json`  |
 | `log_file`               | Pfad zur Logdatei                                         | `logs/bot.log`             |
-| `keywords_blocked`       | Globale Blacklist — gilt für alle Suchen                  | `["defekt", "bastler", …]` |
+| `keywords_blocked`       | Harte Blacklist (Sperren, Fälschungen, Wasserschaden, nur Abholung …) — gilt für alle Suchen, überall im Inserat. Verneinungen wie „kein Wasserschaden“ oder „iCloud frei“ werden erkannt | `["defekt", "bastler", …]` |
+| `defect_keywords`        | Defekte (Riss, Sprung, Pixelfehler, schwarze Flecken, „defekt“ …). Solche Inserate werden nur gemeldet, wenn sie mindestens `defect_discount_percent` unter dem `max_price` der Suche liegen. Ein „Defekt“ an Ladebuchse/Lightning/USB-C oder ein Wackelkontakt zählt nicht | `["sprung", "pixelfehler", …]` |
+| `defect_discount_percent`| Mindestrabatt in %, ab dem defekte Geräte trotzdem gemeldet werden | `30` |
+| `new_seller_max_age_days`| Konten, die jünger als so viele Tage sind, werden übersprungen | `5` |
+| `autostart`              | Bot nach Neustart von Server/Pi automatisch starten        | `true`                     |
 | `groq_api_key`           | Groq API Key (alternativ in `credentials.json` eintragen) | `""`                       |
+| `ai_score_skip_threshold`| KI-Score (1-10), bei dem/darunter ein Fund automatisch übersprungen statt gemeldet wird | `2` |
 
 ---
 
@@ -112,10 +119,14 @@ python server.py
 - Pro Prüfzyklus werden bis zu **3 Seiten** Suchergebnisse gescannt — es werden nur Inserate der letzten 30 Minuten weiterverarbeitet.
 - Alle Suchen laufen **parallel** (Thread Pool mit `max_workers` Threads).
 - Für jedes vielversprechende Inserat wird die **Detailseite** aufgerufen, um die vollständige Beschreibung und das Konto-Erstellungsdatum des Verkäufers zu lesen.
-- **Neues Verkäuferkonto** (heute oder gestern erstellt) → Inserat wird übersprungen.
-- Optional bewertet die **Groq AI** das Inserat mit einem Score von 1–10 und gibt eine Warnung aus, falls Displaytausch, Akkutausch oder andere Modifikationen erkannt werden.
-- Benachrichtigungen werden als WhatsApp-Nachricht mit Bild versendet; bei fehlender Abbildung nur als Text.
-- `data/seen_listings.json` speichert bereits gesehene IDs mit Zeitstempel. Einträge älter als 30 Tage werden automatisch bereinigt.
+- **Neues Verkäuferkonto** (jünger als `new_seller_max_age_days`, Standard 5 Tage) → Inserat wird übersprungen.
+- **Defekte Geräte** (Riss, Pixelfehler, …) werden gemeldet, wenn sie mindestens 30 % (`defect_discount_percent`) unter dem Höchstpreis (`max_price`) der Suche liegen — die Nachricht zeigt dann „🔧 Defekt: …“.
+- Optional bewertet die **Groq AI** das Inserat mit einem Score von 1–10 und gibt eine Warnung aus, falls Displaytausch, Akkutausch, physische Schäden oder Graumarkt-/Fälschungshinweise (z.B. „chinesische Version") erkannt werden. Bei Display-/Rückseitenschaden rechnet die KI den Wiederverkaufspreis nur mit ~60% des eBay-Medians. Ein Score ≤ `ai_score_skip_threshold` (Standard `2`) führt zum automatischen Überspringen statt einer Meldung.
+- Angebote mit unsicheren Zahlungsmethoden (nur PayPal Freunde, nur Überweisung) werden immer übersprungen — unabhängig vom Groq-Key.
+- 👍/👎-Bewertungen aus Telegram werden in `data/ratings.json` gespeichert und unter `/ratings` im Dashboard angezeigt. Ein automatischer Filter auf Basis der Bewertungen ist derzeit deaktiviert.
+- Benachrichtigungen werden als Telegram-Nachricht mit Bild versendet; bei fehlender Abbildung nur als Text.
+- `data/seen_listings.json` speichert pro Suche, welche Inserate schon geprüft wurden, und welche schon gemeldet wurden (keine doppelten Meldungen). Einträge älter als 7 Tage werden beim Start bereinigt.
+- Bezahlte TOP-Anzeigen (ohne Datum, immer oben angeheftet) beenden das Blättern nicht — nur datierte Inserate entscheiden, ob weitere Seiten geladen werden.
 
 ---
 
@@ -124,13 +135,13 @@ python server.py
 ```
 ResellingBot/
 ├── server.py               — Flask-Webserver & Bot-Steuerung (Einstiegspunkt)
-├── config.json             — Suchen, Einstellungen, WhatsApp-Platzhalter
+├── config.json             — Suchen, Einstellungen, Telegram-Platzhalter
 ├── credentials.json        — Sensitive Zugangsdaten (gitignored)
 ├── requirements.txt        — Python-Abhängigkeiten
 ├── bot/
 │   ├── main.py             — Orchestrierung, Config-Laden, Seen-Listings
 │   ├── scraper.py          — Kleinanzeigen-Scraper & Angebotsfilter
-│   ├── notifier.py         — WhatsApp Cloud API Benachrichtigungen
+│   ├── notifier.py         — Telegram Bot API Benachrichtigungen
 │   └── ai_scorer.py        — Groq AI Scoring (1–10)
 ├── frontend/
 │   ├── index.html          — Dashboard (Start/Stop, Suchen, Status)
@@ -150,4 +161,4 @@ ResellingBot/
 - `data/seen_listings.json` verhindert Doppel-Benachrichtigungen, auch nach Neustart.
 - Beim ersten Start werden alle aktuell vorhandenen Inserate als „gesehen" markiert — nur _neue_ Inserate lösen Benachrichtigungen aus.
 - Respektiere die Nutzungsbedingungen von Kleinanzeigen. Zu kurze Prüfintervalle können zu temporären Sperren führen (empfohlen: ≥ 2 Minuten).
-- Der Meta WhatsApp Cloud API Access Token läuft nach 24 Stunden ab, wenn er aus einem Test-System stammt. Für dauerhaften Betrieb einen permanenten System User Token verwenden.
+- Stop/Start/Status per Telegram-Nachricht funktioniert nur von Chat-IDs, die in `chat_id` eingetragen sind — Nachrichten von anderen Chats werden ignoriert.
