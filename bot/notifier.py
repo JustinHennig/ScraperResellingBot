@@ -106,6 +106,10 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
     if listing.battery_capacity is not None and listing.battery_capacity < BATTERY_WARN_BELOW:
         lines.append(f"🔋 Akku nur {listing.battery_capacity} %")
 
+    # Pickup-only listing that's close enough to collect
+    if listing.pickup_note:
+        lines.append(f"📍 Nur Abholung — {listing.pickup_note}")
+
     # Seller rating and account age from the detail page
     if listing.seller_info:
         lines.append(f"👤 {listing.seller_info}")

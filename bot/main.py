@@ -17,6 +17,7 @@ from typing import Optional
 import requests
 import schedule
 
+from bot.location import distance_km, postcode_of, within_pickup_area
 from bot.notifier import notify_new_listing, send_startup_message, validate_telegram_config
 from bot.scraper import (
     Listing,
@@ -26,6 +27,7 @@ from bot.scraper import (
     find_defects,
     is_good_deal,
     is_new_seller,
+    mentions_pickup_only,
 )
 from bot.ai_scorer import score_listing, payment_red_flag
 
@@ -255,6 +257,8 @@ def check_search(
     defect_keywords: Optional[list[str]] = None,
     defect_discount_percent: int = 30,
     new_seller_max_age_days: int = 5,
+    pickup_keywords: Optional[list[str]] = None,
+    pickup_area: Optional[dict] = None,
 ) -> None:
     name = search_config.get("name", search_config.get("query", "?"))
     query = search_config.get("query", "")
@@ -322,7 +326,7 @@ def check_search(
             logger.info(f"Skipped listing {listing.listing_id}: already notified by another search")
             continue
 
-        good, reason = is_good_deal(listing, search_config, global_blocked)
+        good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area)
         if not good:
             logger.info(f"Skipped listing {listing.listing_id} '{listing.title[:40]}': {reason}")
             continue
@@ -330,23 +334,32 @@ def check_search(
         if stop_event.is_set():
             break
 
-        # Fetch detail page for full description, seller join date and seller rating
-        full_desc, join_date, listing.seller_info = fetch_listing_details(listing.url)
-        if full_desc:
-            listing.description = full_desc
+        # Fetch detail page for full description, seller join date, shipping option and seller rating
+        details = fetch_listing_details(listing.url)
+        if details.description:
+            listing.description = details.description
+        listing.seller_info = details.seller_info
         listing.battery_capacity = find_battery_capacity(listing)
 
-        # Skip sellers whose account was created today or yesterday (likely scammers)
-        if is_new_seller(join_date, new_seller_max_age_days):
-            logger.info(f"Skipped listing {listing.listing_id}: new seller account (aktiv seit {join_date:%d.%m.%Y})")
+        # Skip sellers whose account is too new (likely scammers)
+        if is_new_seller(details.join_date, new_seller_max_age_days):
+            logger.info(f"Skipped listing {listing.listing_id}: new seller account (aktiv seit {details.join_date:%d.%m.%Y})")
             continue
 
         # Re-run keyword check against the full description
-        if full_desc:
-            good, reason = is_good_deal(listing, search_config, global_blocked)
+        if details.description:
+            good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area)
             if not good:
                 logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
                 continue
+
+        # Pickup only — by the shipping option or the text — is fine within the pickup area
+        if details.pickup_only or mentions_pickup_only(listing, pickup_keywords):
+            if not within_pickup_area(listing.location, pickup_area):
+                logger.info(f"Skipped listing {listing.listing_id}: pickup only in {listing.location}, outside pickup area")
+                continue
+            dist = distance_km(postcode_of(listing.location), str(pickup_area.get("postcode")))
+            listing.pickup_note = f"{listing.location} ({f'{dist:.1f}'.replace('.', ',')} km)"
 
         # Payment red flags (PayPal Freunde, nur Überweisung) — no buyer protection,
         # skip outright regardless of whether a Groq key is configured.
@@ -432,6 +445,8 @@ def run_all_searches(config: dict, seen: set[str], stop_event=None) -> None:
     defect_keywords = config["settings"].get("defect_keywords", [])
     defect_discount_percent = config["settings"].get("defect_discount_percent", 30)
     new_seller_max_age_days = config["settings"].get("new_seller_max_age_days", 5)
+    pickup_keywords = config["settings"].get("pickup_only_keywords", [])
+    pickup_area = config["settings"].get("pickup_area")
 
     active_searches = [s for s in config.get("searches", []) if s.get("enabled", True)]
 
@@ -440,6 +455,7 @@ def run_all_searches(config: dict, seen: set[str], stop_event=None) -> None:
             check_search(
                 search, seen, tg_config, seen_file, global_blocked, stop_event, groq_api_key, pricer_api_url,
                 ai_score_skip_threshold, defect_keywords, defect_discount_percent, new_seller_max_age_days,
+                pickup_keywords, pickup_area,
             )
         except Exception as e:
             logger.error(

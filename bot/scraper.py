@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote_plus
 
+from bot.location import within_pickup_area
+
 logger = logging.getLogger(__name__)
 
 # Mapping from German month names to month numbers, used when parsing seller join dates.
@@ -87,6 +89,7 @@ class Listing:
     defect_note: str = ""  # Set when a defective device is sent because it's cheap enough, e.g. "sprung — 45% unter eBay-Median"
     seller_info: str = ""  # e.g. "TOP Zufriedenheit · Freundlich · aktiv seit 18.01.2020"
     battery_capacity: Optional[int] = None  # Battery health in % as stated by the seller, e.g. 78
+    pickup_note: str = ""  # Set for pickup-only listings within the pickup area, e.g. "60439 Frankfurt (2,0 km)"
 
 
 # Builds the Kleinanzeigen search URL, e.g.
@@ -391,23 +394,32 @@ def _parse_german_date(text: str) -> Optional[datetime]:
         return None
 
 
-# Fetches the listing detail page and returns (full_description, seller_join_date, seller_summary).
-# Makes a single HTTP request used for the full keyword check, new-seller detection
-# and the seller line in the notification.
-def fetch_listing_details(listing_url: str) -> tuple[str, Optional[datetime], str]:
+# What the listing detail page tells us beyond the search result.
+@dataclass
+class ListingDetails:
+    description: str = ""
+    join_date: Optional[datetime] = None  # Seller's "Aktiv seit" date
+    seller_info: str = ""  # e.g. "TOP Zufriedenheit · Freundlich · aktiv seit 18.01.2020"
+    pickup_only: bool = False  # Seller chose "Nur Abholung" as the shipping option
+
+
+# Fetches the listing detail page. Makes a single HTTP request used for the full
+# keyword check, new-seller detection, the shipping option and the seller line
+# in the notification. Returns empty ListingDetails if the page can't be read.
+def fetch_listing_details(listing_url: str) -> ListingDetails:
     try:
         time.sleep(1)
         response = _http_get(listing_url)
     except requests.RequestException as e:
         logger.warning(f"Could not fetch detail page {listing_url}: {e} — full description and seller date unchecked")
-        return "", None, ""
+        return ListingDetails()
 
     html = re.sub(r'&#(\d+)(?!;)', r'&#\1;', response.text)
 
     # Detect the GDPR consent wall — if we got it, the cookie bypass failed
     if ("ANON_CONSENT" in html or "Datenschutzeinstellungen" in html) and "viewad" not in html:
         logger.warning("Got GDPR consent wall on detail page — seller date check unavailable")
-        return "", None, ""
+        return ListingDetails()
 
     soup = BeautifulSoup(html, "html.parser")
 
@@ -435,7 +447,11 @@ def fetch_listing_details(listing_url: str) -> tuple[str, Optional[datetime], st
             if join_date:
                 break
 
-    return full_description, join_date, _seller_summary(soup, join_date)
+    # --- Shipping option: "Nur Abholung" or "+ Versand ab 4,99 €" / "Versand möglich" ---
+    shipping_el = soup.select_one(".boxedarticle--details--shipping")
+    pickup_only = bool(shipping_el and "nur abholung" in shipping_el.get_text(" ", strip=True).lower())
+
+    return ListingDetails(full_description, join_date, _seller_summary(soup, join_date), pickup_only)
 
 
 # Builds the seller line for the notification from the detail page, e.g.
@@ -697,9 +713,24 @@ def find_battery_capacity(listing: Listing) -> Optional[int]:
     return min(hits)[1] if hits else None
 
 
+# True if title or description says the listing is pickup only
+# ("nur Abholung", "nur Selbstabholer", "kein Versand" …), unless negated.
+def mentions_pickup_only(listing: Listing, pickup_keywords: Optional[list[str]]) -> bool:
+    text = _normalize_text(f"{listing.title} {listing.description}")
+    return any(_blocked_keyword_unnegated(kw, text) for kw in pickup_keywords or [])
+
+
 # Checks whether a listing matches the configured criteria.
+# pickup_keywords ("nur Abholung", "nur Selbstabholer" …) reject the listing
+# unless its location lies within pickup_area, e.g. {"postcode": "60438", "radius_km": 5}.
 # Returns (is_good, reason_string).
-def is_good_deal(listing: Listing, search_config: dict, global_blocked: Optional[list[str]] = None) -> tuple[bool, str]:
+def is_good_deal(
+    listing: Listing,
+    search_config: dict,
+    global_blocked: Optional[list[str]] = None,
+    pickup_keywords: Optional[list[str]] = None,
+    pickup_area: Optional[dict] = None,
+) -> tuple[bool, str]:
     if global_blocked is None:
         global_blocked = []
     min_price = search_config.get("min_price", 0)
@@ -719,11 +750,15 @@ def is_good_deal(listing: Listing, search_config: dict, global_blocked: Optional
     if min_price > 0 and listing.price < min_price:
         return False, f"Preis {listing.price}€ zu niedrig (Min: {min_price}€)"
 
-    # Global blocked keywords (damage, locks, pickup-only …) count anywhere in
+    # Global blocked keywords (locks, fakes, water damage …) count anywhere in
     # the listing unless negated ("kein Wasserschaden", "iCloud frei").
     for kw in global_blocked:
         if _blocked_keyword_unnegated(kw, text):
             return False, f"Gesperrtes Keyword gefunden: '{kw}'"
+
+    # Pickup only is fine within reach, otherwise skip
+    if mentions_pickup_only(listing, pickup_keywords) and not within_pickup_area(listing.location, pickup_area):
+        return False, "Nur Abholung, nicht im Abholbereich"
 
     # Verify listing is actually about the searched product.
     query = search_config.get("query", "")

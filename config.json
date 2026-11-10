@@ -673,8 +673,6 @@
       "gesperrt",
       "wasserschaden",
       "platinenschaden",
-      "kein versand",
-      "nur abholung",
       "chinesische version",
       "china version",
       "asia version",
@@ -734,7 +732,32 @@
       "akku tot"
     ],
     "defect_discount_percent": 30,
-    "new_seller_max_age_days": 5
+    "new_seller_max_age_days": 5,
+    "pickup_only_keywords": [
+      "nur abholung",
+      "nur zur abholung",
+      "nur gegen abholung",
+      "nur abholen",
+      "ausschließlich abholung",
+      "nur selbstabholer",
+      "nur an selbstabholer",
+      "nur für selbstabholer",
+      "nur selbstabholung",
+      "ausschließlich selbstabholung",
+      "nur persönliche übergabe",
+      "kein versand",
+      "keinen versand",
+      "versand nicht möglich",
+      "versand ist nicht möglich",
+      "versand ausgeschlossen",
+      "keine versendung",
+      "versand: nein",
+      "versand nein"
+    ],
+    "pickup_area": {
+      "postcode": "60438",
+      "radius_km": 5
+    }
   },
   "telegram": {}
 }

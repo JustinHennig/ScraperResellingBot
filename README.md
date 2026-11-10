@@ -108,6 +108,8 @@ python server.py
 | `defect_keywords`        | Defekte (Riss, Sprung, Pixelfehler, schwarze Flecken, „defekt“ …). Solche Inserate werden nur gemeldet, wenn sie mindestens `defect_discount_percent` unter dem `max_price` der Suche liegen. Ein „Defekt“ an Ladebuchse/Lightning/USB-C oder ein Wackelkontakt zählt nicht | `["sprung", "pixelfehler", …]` |
 | `defect_discount_percent`| Mindestrabatt in %, ab dem defekte Geräte trotzdem gemeldet werden | `30` |
 | `new_seller_max_age_days`| Konten, die jünger als so viele Tage sind, werden übersprungen | `5` |
+| `pickup_only_keywords`   | Formulierungen für „nur Abholung“ („nur Selbstabholer“, „kein Versand“ …). Solche Inserate — und alle mit Versandart „Nur Abholung“ — werden nur im `pickup_area` gemeldet | `["nur abholung", …]` |
+| `pickup_area`            | Umkreis, in dem Abholung in Frage kommt (Abstand zwischen PLZ-Mittelpunkten) | `{"postcode": "60438", "radius_km": 5}` |
 | `autostart`              | Bot nach Neustart von Server/Pi automatisch starten        | `true`                     |
 | `groq_api_key`           | Groq API Key (alternativ in `credentials.json` eintragen) | `""`                       |
 | `ai_score_skip_threshold`| KI-Score (1-10), bei dem/darunter ein Fund automatisch übersprungen statt gemeldet wird | `2` |
@@ -120,6 +122,7 @@ python server.py
 - Alle Suchen laufen **parallel** (Thread Pool mit `max_workers` Threads).
 - Für jedes vielversprechende Inserat wird die **Detailseite** aufgerufen, um die vollständige Beschreibung und das Konto-Erstellungsdatum des Verkäufers zu lesen.
 - **Neues Verkäuferkonto** (jünger als `new_seller_max_age_days`, Standard 5 Tage) → Inserat wird übersprungen.
+- **Nur Abholung** (Versandart oder Text) → nur gemeldet, wenn der Ort im `pickup_area` liegt; die Nachricht zeigt dann „📍 Nur Abholung — Ort (Entfernung)“. PLZ-Koordinaten: `bot/plz_de.csv` aus [GeoNames](https://www.geonames.org/) (CC BY 4.0).
 - **Defekte Geräte** (Riss, Pixelfehler, …) werden gemeldet, wenn sie mindestens 30 % (`defect_discount_percent`) unter dem Höchstpreis (`max_price`) der Suche liegen — die Nachricht zeigt dann „🔧 Defekt: …“.
 - Optional bewertet die **Groq AI** das Inserat mit einem Score von 1–10 und gibt eine Warnung aus, falls Displaytausch, Akkutausch, physische Schäden oder Graumarkt-/Fälschungshinweise (z.B. „chinesische Version") erkannt werden. Bei Display-/Rückseitenschaden rechnet die KI den Wiederverkaufspreis nur mit ~60% des eBay-Medians. Ein Score ≤ `ai_score_skip_threshold` (Standard `2`) führt zum automatischen Überspringen statt einer Meldung.
 - Angebote mit unsicheren Zahlungsmethoden (nur PayPal Freunde, nur Überweisung) werden immer übersprungen — unabhängig vom Groq-Key.
