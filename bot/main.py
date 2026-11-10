@@ -17,7 +17,7 @@ from typing import Optional
 import requests
 import schedule
 
-from bot.location import distance_km, postcode_of, within_pickup_area
+from bot.location import distance_km, postcode_of
 from bot.notifier import notify_new_listing, send_startup_message, validate_telegram_config
 from bot.scraper import (
     Listing,
@@ -334,7 +334,7 @@ def check_search(
         if stop_event.is_set():
             break
 
-        # Fetch detail page for full description, seller join date, shipping option and seller rating
+        # Fetch detail page for full description, seller join date and seller rating
         details = fetch_listing_details(listing.url)
         if details.description:
             listing.description = details.description
@@ -353,11 +353,10 @@ def check_search(
                 logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
                 continue
 
-        # Pickup only — by the shipping option or the text — is fine within the pickup area
-        if details.pickup_only or mentions_pickup_only(listing, pickup_keywords):
-            if not within_pickup_area(listing.location, pickup_area):
-                logger.info(f"Skipped listing {listing.listing_id}: pickup only in {listing.location}, outside pickup area")
-                continue
+        # Pickup-only wording passed is_good_deal only within the pickup area — show where.
+        # Kleinanzeigen's "Nur Abholung" shipping option is ignored: sellers often set it
+        # without meaning it, so only what they write counts.
+        if mentions_pickup_only(listing, pickup_keywords):
             dist = distance_km(postcode_of(listing.location), str(pickup_area.get("postcode")))
             listing.pickup_note = f"{listing.location} ({f'{dist:.1f}'.replace('.', ',')} km)"
 

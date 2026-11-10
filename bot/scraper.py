@@ -400,12 +400,11 @@ class ListingDetails:
     description: str = ""
     join_date: Optional[datetime] = None  # Seller's "Aktiv seit" date
     seller_info: str = ""  # e.g. "TOP Zufriedenheit · Freundlich · aktiv seit 18.01.2020"
-    pickup_only: bool = False  # Seller chose "Nur Abholung" as the shipping option
 
 
 # Fetches the listing detail page. Makes a single HTTP request used for the full
-# keyword check, new-seller detection, the shipping option and the seller line
-# in the notification. Returns empty ListingDetails if the page can't be read.
+# keyword check, new-seller detection and the seller line in the notification.
+# Returns empty ListingDetails if the page can't be read.
 def fetch_listing_details(listing_url: str) -> ListingDetails:
     try:
         time.sleep(1)
@@ -447,11 +446,7 @@ def fetch_listing_details(listing_url: str) -> ListingDetails:
             if join_date:
                 break
 
-    # --- Shipping option: "Nur Abholung" or "+ Versand ab 4,99 €" / "Versand möglich" ---
-    shipping_el = soup.select_one(".boxedarticle--details--shipping")
-    pickup_only = bool(shipping_el and "nur abholung" in shipping_el.get_text(" ", strip=True).lower())
-
-    return ListingDetails(full_description, join_date, _seller_summary(soup, join_date), pickup_only)
+    return ListingDetails(full_description, join_date, _seller_summary(soup, join_date))
 
 
 # Builds the seller line for the notification from the detail page, e.g.
