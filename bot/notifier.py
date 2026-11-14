@@ -100,7 +100,7 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
 
     # Phone hangs in recovery/DFU mode — usually fixable by restoring the software
     if listing.recovery:
-        lines.append("🔄 Recovery-Modus — evtl. per Wiederherstellung lösbar")
+        lines.append("🔄 Recovery-Modus")
 
     # Defect that was let through because the price is low enough
     if listing.defect_note:
