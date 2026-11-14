@@ -25,6 +25,7 @@ from bot.scraper import (
     fetch_listings,
     find_battery_capacity,
     find_defects,
+    mentions_recovery,
     is_good_deal,
     is_new_seller,
     mentions_pickup_only,
@@ -326,7 +327,9 @@ def check_search(
             logger.info(f"Skipped listing {listing.listing_id}: already notified by another search")
             continue
 
-        good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area)
+        # The snippet may lack a recovery mention that's in the full description,
+        # so "Bastler"/"Ersatzteil" only count after the detail page is loaded.
+        good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area, assume_recovery=True)
         if not good:
             logger.info(f"Skipped listing {listing.listing_id} '{listing.title[:40]}': {reason}")
             continue
@@ -346,12 +349,15 @@ def check_search(
             logger.info(f"Skipped listing {listing.listing_id}: new seller account (aktiv seit {details.join_date:%d.%m.%Y})")
             continue
 
-        # Re-run keyword check against the full description
-        if details.description:
-            good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area)
-            if not good:
-                logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
-                continue
+        # Re-run keyword check against the full description — always, since the
+        # first pass let "Bastler"/"Ersatzteil" through in case of a recovery mention.
+        good, reason = is_good_deal(listing, search_config, global_blocked, pickup_keywords, pickup_area)
+        if not good:
+            logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
+            continue
+        listing.recovery = mentions_recovery(listing)
+        if listing.recovery:
+            logger.info(f"Listing {listing.listing_id} mentions recovery mode")
 
         # Pickup-only wording passed is_good_deal only within the pickup area — show where.
         # Kleinanzeigen's "Nur Abholung" shipping option is ignored: sellers often set it
@@ -378,8 +384,13 @@ def check_search(
 
         # Defective devices (crack, dead pixels, "defekt" …) are only worth it when
         # they're at least defect_discount_percent below the search's max_price.
+        # Recovery-mode phones are "defekt" by definition — the discount rule doesn't apply,
+        # specific damage (crack, pixels …) is still shown.
         defects = find_defects(listing, defect_keywords or [])
-        if defects:
+        if listing.recovery:
+            specific = [d for d in defects if d not in _GENERIC_DEFECT_WORDS]
+            listing.defect_note = ", ".join(specific)
+        elif defects:
             discount = round(100 * (1 - listing.price / max_price)) if max_price else None
             if discount is None or discount < defect_discount_percent:
                 logger.info(
@@ -400,7 +411,7 @@ def check_search(
             # Auto-skip clear rejects (e.g. counterfeit/grey-market devices) instead
             # of just displaying a low score — borderline scores still get sent so
             # they can be 👍/👎-rated.
-            if score is not None and score <= ai_score_skip_threshold:
+            if score is not None and score <= ai_score_skip_threshold and not listing.recovery:
                 logger.info(f"Skipped listing {listing.listing_id} — AI score {score}/10 too low: {warning}")
                 continue
 
@@ -427,6 +438,10 @@ def check_search(
     logger.info(
         f"Search '{name}' done. {checked_count} listings checked, {new_count} notifications sent."
     )
+
+
+# Defect keywords that only say "broken" — for a recovery-mode phone they add nothing.
+_GENERIC_DEFECT_WORDS = {"defekt", "kaputt", "beschädig", "schaden", "schäden"}
 
 
 # Runs all enabled searches from config in parallel using a thread pool.

@@ -90,6 +90,7 @@ class Listing:
     seller_info: str = ""  # e.g. "TOP Zufriedenheit · Freundlich · aktiv seit 18.01.2020"
     battery_capacity: Optional[int] = None  # Battery health in % as stated by the seller, e.g. 78
     pickup_note: str = ""  # Set for pickup-only listings within the pickup area, e.g. "60439 Frankfurt (2,0 km)"
+    recovery: bool = False  # Seller says the phone hangs in recovery/DFU mode
 
 
 # Builds the Kleinanzeigen search URL, e.g.
@@ -715,9 +716,30 @@ def mentions_pickup_only(listing: Listing, pickup_keywords: Optional[list[str]])
     return any(_blocked_keyword_unnegated(kw, text) for kw in pickup_keywords or [])
 
 
+# Recovery or DFU mode ("hängt im Recovery-Modus", "Wiederherstellungsmodus",
+# "DFU Mode") is usually just a failed update that a restore fixes, but sellers
+# list such phones as "Bastler"/"Ersatzteil" well below their value.
+_RECOVERY_RE = re.compile(
+    r'recovery[\s-]*(?:modus|mode|menü|menu)|\b(?:im|in|ins|in den) recovery\b'
+    r'|wiederherstellungs[\s-]*modus|\bdfu[\s-]*(?:modus|mode)'
+)
+# Global blocked keywords that a recovery mention overrides: they only say the
+# seller considers the phone broken. Locks, water or board damage still block.
+RECOVERY_OVERRIDABLE = ("bastler", "ersatzteil", "reparatur")
+
+
+# True if title or description says the phone hangs in recovery/DFU mode, unless negated.
+def mentions_recovery(listing: Listing) -> bool:
+    text = _normalize_text(f"{listing.title} {listing.description}")
+    return any(not _is_negated(text, m.start(), m.end()) for m in _RECOVERY_RE.finditer(text))
+
+
 # Checks whether a listing matches the configured criteria.
 # pickup_keywords ("nur Abholung", "nur Selbstabholer" …) reject the listing
 # unless its location lies within pickup_area, e.g. {"postcode": "60438", "radius_km": 5}.
+# A recovery-mode mention lifts the RECOVERY_OVERRIDABLE keywords; assume_recovery
+# lifts them for the search-result snippet, whose recovery mention may only be
+# in the full description — the caller must re-check with the full description.
 # Returns (is_good, reason_string).
 def is_good_deal(
     listing: Listing,
@@ -725,6 +747,7 @@ def is_good_deal(
     global_blocked: Optional[list[str]] = None,
     pickup_keywords: Optional[list[str]] = None,
     pickup_area: Optional[dict] = None,
+    assume_recovery: bool = False,
 ) -> tuple[bool, str]:
     if global_blocked is None:
         global_blocked = []
@@ -747,7 +770,10 @@ def is_good_deal(
 
     # Global blocked keywords (locks, fakes, water damage …) count anywhere in
     # the listing unless negated ("kein Wasserschaden", "iCloud frei").
+    recovery = assume_recovery or mentions_recovery(listing)
     for kw in global_blocked:
+        if recovery and kw.lower().startswith(RECOVERY_OVERRIDABLE):
+            continue
         if _blocked_keyword_unnegated(kw, text):
             return False, f"Gesperrtes Keyword gefunden: '{kw}'"
 

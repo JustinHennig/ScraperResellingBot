@@ -98,6 +98,10 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
             sell_line += f"  •  {profit_emoji} Gewinn: ~{listing.estimated_profit:+d} EUR"
         lines.append(sell_line)
 
+    # Phone hangs in recovery/DFU mode — usually fixable by restoring the software
+    if listing.recovery:
+        lines.append("🔄 Recovery-Modus — evtl. per Wiederherstellung lösbar")
+
     # Defect that was let through because the price is low enough
     if listing.defect_note:
         lines.append(f"🔧 Defekt: {listing.defect_note}")

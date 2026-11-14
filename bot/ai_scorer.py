@@ -72,6 +72,9 @@ GEWINNBERECHNUNG (wenn geschätzter eBay-Verkaufspreis angegeben):
 - Liegt der Kaufpreis stark unter dem eBay-Median → Score entsprechend erhöhen
 - Bei Defekten (Display-Riss/-Sprung, Rückseitenschaden, Pixelfehler, schwarze Flecken, sonstige defekte Teile): Solche Inserate werden nur weitergeleitet, wenn der Kaufpreis deutlich (ca. 30 % oder mehr) unter dem Preis liegt, der für ein intaktes Gerät noch ein gutes Angebot wäre — dann lohnen sich Reparatur und Wiederverkauf. Bewerte sie deshalb NICHT als Verlustgeschäft, sondern nach Schwere des Defekts und Höhe des Preisnachlasses: leichter, günstig reparierbarer Defekt (kleiner Riss, Rückglas, einzelne Pixelfehler) → 5-7, schwerer Defekt (Display komplett defekt, mehrere Defekte) → 3-4. Score 1-2 nur, wenn das Gerät praktisch unbrauchbar ist. Nenne den Defekt immer kurz im Warnungsfeld
 
+RECOVERY-/DFU-MODUS:
+- Hängt das Gerät laut Inserat im Recovery-, Wiederherstellungs- oder DFU-Modus, ist das meist nur ein fehlgeschlagenes Update, das der Käufer per Wiederherstellung selbst behebt. Bewerte es NICHT als „komplett defekt" oder „nur für Ersatzteile" (also nicht Score 1-2), sondern wie ein funktionierendes Gerät nach Preis und äußerem Zustand, mit einem Abzug von 1-2 Punkten für das Restrisiko eines Hardwaredefekts (z.B. Platine). Weitere genannte Schäden (Riss, Wasserschaden) zählen normal. Nenne „Recovery-Modus" kurz im Warnungsfeld
+
 GRAUMARKT- ODER GEFÄLSCHTE GERÄTE (Score IMMER 1-2, unabhängig von Preis oder Zustand):
 - Hinweise wie „chinesische Version", „China-Version", „Asia-Version", „Replika", „Fake", „Kopie", „kein Original-Gerät", „Hong-Kong-Version" im Titel oder der Beschreibung bedeuten Graumarktware oder eine Fälschung — für Wiederverkauf über normale Kanäle praktisch wertlos, selbst bei niedrigem Preis
 - In diesem Fall Score konsequent auf 1-2 setzen und im Warnungsfeld den Grund nennen (z.B. „Chinesische Version — vermutlich Graumarktware/Fälschung, kein reguläres Gerät")
