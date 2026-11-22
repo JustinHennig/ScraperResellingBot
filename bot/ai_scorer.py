@@ -1,6 +1,7 @@
 # Groq AI scorer: evaluates a listing's resale value, condition, and originality.
 # Returns a score (1-10) and an optional warning string for non-original parts.
-# Uses Groq's free tier (console.groq.com) with openai/gpt-oss-120b.
+# Uses Groq's free tier (console.groq.com) with openai/gpt-oss-120b, and
+# openai/gpt-oss-20b once 120b's daily token limit is used up.
 import json
 import logging
 import re
@@ -19,7 +20,8 @@ _groq_lock = threading.Lock()
 
 # Model — llama-3.3-70b-versatile was retired by Groq; openai/gpt-oss-120b is the
 # closest available replacement for condition/originality judgment quality.
-_GROQ_MODEL = "openai/gpt-oss-120b"
+# Groq's daily limits are per model, so when one is used up the next takes over.
+_GROQ_MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
 # System prompt: detailed scoring rubric and strict JSON output format
 _SYSTEM = """Du bist ein Experte für die Bewertung von Gebrauchthandy-Inseraten auf deutschen Kleinanzeigenportalen im Hinblick auf Wiederverkaufsgewinn.
@@ -122,9 +124,9 @@ def payment_red_flag(text: str) -> str:
     return ""
 
 
-# Unix time until which Groq calls are skipped because a daily limit
+# Per model: Unix time until which it's skipped because its daily limit
 # (tokens/requests per day) was hit — retrying before then can't succeed.
-_groq_paused_until = 0.0
+_groq_paused_until: dict[str, float] = {}
 
 
 # Parses Groq's "Please try again in 1h2m5.3s" (or "retry in 4.2s") into seconds.
@@ -136,17 +138,26 @@ def _groq_retry_seconds(err_str: str) -> Optional[float]:
     return hours * 3600 + minutes * 60 + seconds
 
 
-# Calls the Groq chat API with retry-on-429, serialized across threads via
-# _groq_lock. Returns the raw response text, or None on failure (logged).
+# Calls the Groq chat API with the first model whose daily limit isn't used up.
+# Returns the raw response text, or None on failure (logged).
 def _call_groq(client: Groq, system: str, user_msg: str, max_tokens: int, log_ctx: str) -> Optional[str]:
-    global _groq_paused_until
-    if time.time() < _groq_paused_until:
-        return None
+    for model in _GROQ_MODELS:
+        if time.time() < _groq_paused_until.get(model, 0):
+            continue
+        raw = _call_groq_model(client, model, system, user_msg, max_tokens, log_ctx)
+        if raw is not None or time.time() >= _groq_paused_until.get(model, 0):
+            return raw  # answered, or failed for another reason than the daily limit
+    return None
+
+
+# Calls one Groq model with retry-on-429, serialized across threads via
+# _groq_lock. Returns the raw response text, or None on failure (logged).
+def _call_groq_model(client: Groq, model: str, system: str, user_msg: str, max_tokens: int, log_ctx: str) -> Optional[str]:
     for attempt in range(3):
         with _groq_lock:
             try:
                 chat = client.chat.completions.create(
-                    model=_GROQ_MODEL,
+                    model=model,
                     messages=[
                         {"role": "system", "content": system},
                         {"role": "user", "content": user_msg},
@@ -165,18 +176,20 @@ def _call_groq(client: Groq, system: str, user_msg: str, max_tokens: int, log_ct
                 # Daily quota used up: pause AI scoring until it resets instead of
                 # retrying (each retry blocks every search thread for the wait)
                 if "429" in err_str and "per day" in err_str:
-                    _groq_paused_until = time.time() + (retry_after or 3600) + 5
+                    _groq_paused_until[model] = time.time() + (retry_after or 3600) + 5
+                    until = time.strftime('%H:%M', time.localtime(_groq_paused_until[model]))
+                    nxt = next((m for m in _GROQ_MODELS if time.time() >= _groq_paused_until.get(m, 0)), None)
                     logger.warning(
-                        f"Groq daily limit reached — AI scoring paused until "
-                        f"{time.strftime('%H:%M', time.localtime(_groq_paused_until))}, listings are sent without a score"
+                        f"Groq daily limit reached for {model} until {until} — "
+                        + (f"switching to {nxt}" if nxt else "listings are sent without a score")
                     )
                     return None
                 if "429" in err_str and attempt < 2:
                     wait = retry_after + 1 if retry_after is not None else 15
-                    logger.warning(f"Groq 429 for {log_ctx} — retrying in {wait:.0f}s (attempt {attempt + 1}/3)")
+                    logger.warning(f"Groq 429 ({model}) for {log_ctx} — retrying in {wait:.0f}s (attempt {attempt + 1}/3)")
                     time.sleep(wait)
                 else:
-                    logger.warning(f"Groq call failed for {log_ctx}: {e}")
+                    logger.warning(f"Groq call ({model}) failed for {log_ctx}: {e}")
                     return None
     return None
 

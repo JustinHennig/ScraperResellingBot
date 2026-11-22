@@ -44,6 +44,12 @@ _OVERRIDE_FIELDS = {"min_price": 0, "max_price": 0, "enabled": True}
 logger = logging.getLogger(__name__)
 _seen_lock = Lock()
 
+# Listing ID -> time its notification first failed. These are retried for up
+# to NOTIFY_RETRY_SECONDS even once older than 30 minutes, so a Telegram
+# outage doesn't lose them. Guarded by _seen_lock.
+_failed_notifications: dict[str, float] = {}
+NOTIFY_RETRY_SECONDS = 2 * 3600
+
 # ---------------------------------------------------------------------------
 # PricerBot API helper
 # ---------------------------------------------------------------------------
@@ -318,8 +324,11 @@ def check_search(
 
         logger.info(f"Listing {listing.listing_id} '{listing.title}' — {listing.price}€ ({name})")
 
-        # Filter: ignore listings older than 30 minutes
-        if listing.posted_at is not None and listing.posted_at < cutoff:
+        # Filter: ignore listings older than 30 minutes, unless their notification failed earlier
+        with _seen_lock:
+            first_failure = _failed_notifications.get(listing.listing_id)
+        retrying = first_failure is not None and time.time() - first_failure < NOTIFY_RETRY_SECONDS
+        if listing.posted_at is not None and listing.posted_at < cutoff and not retrying:
             logger.info(f"Skipped listing {listing.listing_id}: older than 30 minutes (posted {listing.posted_at:%d.%m. %H:%M})")
             continue
 
@@ -425,11 +434,17 @@ def check_search(
         logger.info(f"Good deal found: {listing.title} — {listing.price}€ ({name})")
         if notify_new_listing(tg_config, listing, name):
             new_count += 1
+            with _seen_lock:
+                _failed_notifications.pop(listing.listing_id, None)
         else:
             # Telegram unreachable — forget the listing so the next cycle tries again
             with _seen_lock:
                 seen.discard(listing.listing_id)
                 seen.discard(key)
+                now = time.time()
+                for lid in [l for l, t in _failed_notifications.items() if now - t >= NOTIFY_RETRY_SECONDS]:
+                    del _failed_notifications[lid]
+                _failed_notifications.setdefault(listing.listing_id, now)
             logger.warning(f"Notification for listing {listing.listing_id} failed — retrying next cycle")
 
     if seen_changed:

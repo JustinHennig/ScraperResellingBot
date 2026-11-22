@@ -35,7 +35,9 @@ def send_telegram_message(tg_config: dict, body: str, reply_markup: dict | None 
             response = requests.post(
                 f"{TG_API_URL}{token}/sendMessage",
                 json={"chat_id": chat_id, **payload_base},
-                timeout=10,
+                # Telegram sometimes takes >10 s to answer; a timeout means the
+                # listing is retried next cycle (and may be lost if it's too old by then)
+                timeout=30,
             )
             if response.status_code != 200:
                 logger.error(f"Telegram notification failed for {chat_id}: HTTP {response.status_code} — {response.text[:200]}")
