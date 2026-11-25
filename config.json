@@ -752,7 +752,15 @@
       "versand ausgeschlossen",
       "keine versendung",
       "versand: nein",
-      "versand nein"
+      "versand nein",
+      "bitte selber abholen",
+      "bitte selbst abholen",
+      "bitte selbstabholen",
+      "nur selber abholen",
+      "nur selbst abholen",
+      "muss abgeholt werden",
+      "muss selbst abgeholt werden",
+      "muss selber abgeholt werden"
     ],
     "pickup_area": {
       "postcode": "60438",

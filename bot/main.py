@@ -25,6 +25,7 @@ from bot.scraper import (
     fetch_listings,
     find_battery_capacity,
     find_defects,
+    mentions_fixed_price,
     mentions_recovery,
     is_good_deal,
     is_new_seller,
@@ -365,6 +366,7 @@ def check_search(
             logger.info(f"Skipped listing {listing.listing_id} after full desc check: {reason}")
             continue
         listing.recovery = mentions_recovery(listing)
+        listing.fixed_price = mentions_fixed_price(listing)
         if listing.recovery:
             logger.info(f"Listing {listing.listing_id} mentions recovery mode")
 

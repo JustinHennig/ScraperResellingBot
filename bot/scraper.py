@@ -91,6 +91,7 @@ class Listing:
     battery_capacity: Optional[int] = None  # Battery health in % as stated by the seller, e.g. 78
     pickup_note: str = ""  # Set for pickup-only listings within the pickup area, e.g. "60439 Frankfurt (2,0 km)"
     recovery: bool = False  # Seller says the phone hangs in recovery/DFU mode
+    fixed_price: bool = False  # Seller says the price is fixed ("Festpreis", "nicht verhandelbar")
 
 
 # Builds the Kleinanzeigen search URL, e.g.
@@ -732,6 +733,19 @@ RECOVERY_OVERRIDABLE = ("bastler", "ersatzteil", "reparatur")
 def mentions_recovery(listing: Listing) -> bool:
     text = _normalize_text(f"{listing.title} {listing.description}")
     return any(not _is_negated(text, m.start(), m.end()) for m in _RECOVERY_RE.finditer(text))
+
+
+# "Festpreis", "Preis ist fest", "nicht verhandelbar" … — no room to haggle.
+_FIXED_PRICE_RE = re.compile(
+    r'fest[\s-]*preis|fixpreis|fester preis|preis (?:ist )?(?:fest|fix)\b'
+    r'|(?:nicht|kein(?:e|en)?) (?:preis)?verhandelbar|keine (?:preis)?verhandlung'
+)
+
+
+# True if title or description says the price is fixed, unless negated ("kein Festpreis").
+def mentions_fixed_price(listing: Listing) -> bool:
+    text = _normalize_text(f"{listing.title} {listing.description}")
+    return any(not _is_negated(text, m.start(), m.end()) for m in _FIXED_PRICE_RE.finditer(text))
 
 
 # Checks whether a listing matches the configured criteria.

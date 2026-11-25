@@ -5,6 +5,7 @@
 
 import json
 import logging
+import re
 import threading
 import time
 from datetime import datetime
@@ -21,8 +22,10 @@ from bot.main import (
     save_config_overrides,
     setup_logging,
 )
+from bot.feedback import add_feedback, all_feedback, set_done
 from bot.notifier import send_telegram_message
 from bot.ratings import all_records, set_rating
+from bot.scraper import fetch_listing_details
 
 app = Flask(
     __name__,
@@ -114,6 +117,12 @@ def log_page():
 @app.route("/ratings")
 def ratings_page():
     return render_template("ratings.html")
+
+
+# Serves the page listing improvement suggestions sent via Telegram.
+@app.route("/feedback")
+def feedback_page():
+    return render_template("feedback.html")
 
 
 # Returns current bot state: running flag, check interval, and seconds until the next run.
@@ -396,6 +405,21 @@ def api_ratings():
     return jsonify({"records": records})
 
 
+# Returns all saved suggestions, newest first.
+@app.route("/api/feedback")
+def api_feedback():
+    return jsonify({"entries": all_feedback()})
+
+
+# Marks a suggestion as done or open. Body: {"id": "...", "done": true}
+@app.route("/api/feedback/done", methods=["POST"])
+def api_feedback_done():
+    data = request.get_json(silent=True) or {}
+    if not set_done(str(data.get("id", "")), bool(data.get("done"))):
+        return jsonify({"error": "Nicht gefunden"}), 404
+    return jsonify({"ok": True})
+
+
 # Clears the bot log file.
 @app.route("/api/logs/clear", methods=["POST"])
 def api_logs_clear():
@@ -423,8 +447,70 @@ _COMMANDS_HELP = (
     "• liste — alle Suchen mit Preis & Status\n"
     "• aktivieren <name> — Suche einschalten\n"
     "• deaktivieren <name> — Suche ausschalten\n"
-    "• preis <name> <min> <max> — Preisspanne setzen"
+    "• preis <name> <min> <max> — Preisspanne setzen\n"
+    "• hilfe — diese Übersicht\n\n"
+    "Jeder andere Text wird als Verbesserungsvorschlag gespeichert. "
+    "Antworte direkt auf eine Meldung, damit die Anzeige mitgespeichert wird."
 )
+
+_HELP_WORDS = {"hilfe", "help", "befehle", "?", "/start", "/help"}
+_LISTING_URL_RE = re.compile(r"https?://(?:www\.)?kleinanzeigen\.de/s-anzeige/[^\s/]+/(\d+)[^\s]*")
+_CALLBACK_ID_RE = re.compile(r"rate:(\d+):")
+
+
+# Returns the listing a reply refers to: id from the rating buttons (until they're
+# tapped) or the link in the notification, details from ratings.json and the
+# description from the live listing page. None if the reply isn't to a notification.
+def _replied_listing(reply: dict) -> Optional[dict]:
+    body = reply.get("text") or reply.get("caption") or ""
+    listing_id = None
+    for row in (reply.get("reply_markup") or {}).get("inline_keyboard", []):
+        for button in row:
+            m = _CALLBACK_ID_RE.match(button.get("callback_data", ""))
+            if m:
+                listing_id = m.group(1)
+    url_match = _LISTING_URL_RE.search(body)
+    if listing_id is None and url_match:
+        listing_id = url_match.group(1)
+    if listing_id is None:
+        return {"message": body} if body else None
+
+    record = all_records().get(listing_id, {})
+    url = record.get("url") or (url_match.group(0) if url_match else "")
+    description = ""
+    if url:
+        try:
+            description = fetch_listing_details(url).description
+        except Exception:
+            logging.getLogger("server").warning(f"Could not load description of {listing_id} for feedback")
+    return {
+        "listing_id": listing_id,
+        "title": record.get("title") or (body.splitlines()[0] if body else ""),
+        "price": record.get("price"),
+        "url": url,
+        "search_name": record.get("search_name", ""),
+        "description": description,
+        "message": body,
+    }
+
+
+# Saves a suggestion (with the listing it replies to) and confirms it in the chat.
+# Runs in its own thread: loading the listing page shouldn't hold up the poll loop.
+def _save_feedback(reply_config: dict, chat_id: str, text: str, reply: Optional[dict]) -> None:
+    log = logging.getLogger("server")
+    try:
+        listing = _replied_listing(reply) if reply else None
+        add_feedback(chat_id, text, listing)
+        title = (listing or {}).get("title")
+        about = f" for listing {listing.get('listing_id', '?')}" if title else ""
+        log.info(f"Feedback saved{about}: {text[:80]}")
+        if title:
+            send_telegram_message(reply_config, f"📝 Notiert — Vorschlag zu „{title[:60]}“ gespeichert.")
+        else:
+            send_telegram_message(reply_config, "📝 Notiert — Vorschlag gespeichert.")
+    except Exception:
+        log.exception("Failed to save feedback")
+        send_telegram_message(reply_config, "⚠️ Vorschlag konnte nicht gespeichert werden.")
 
 
 def _allowed_chat_ids(tg_config: dict) -> set[str]:
@@ -548,12 +634,19 @@ def _handle_update(token: str, update: dict, allowed: set[str]) -> None:
 
     message = update.get("message", {})
     chat_id = str(message.get("chat", {}).get("id", ""))
-    text = (message.get("text") or "").strip().lower()
+    raw_text = (message.get("text") or "").strip()
+    text = raw_text.lower()
 
     if not text or chat_id not in allowed:
         return
 
     reply_config = {"bot_token": token, "chat_id": [chat_id]}
+
+    # A reply to a message is always a suggestion, even if it reads like a command
+    reply = message.get("reply_to_message")
+    if reply:
+        threading.Thread(target=_save_feedback, args=(reply_config, chat_id, raw_text, reply), daemon=True).start()
+        return
 
     if text in ("stop", "pause", "aus", "halt"):
         if _stop_bot():
@@ -620,8 +713,10 @@ def _handle_update(token: str, update: dict, allowed: set[str]) -> None:
                     except Exception as exc:
                         reply = f"Fehler beim Speichern: {exc}"
             send_telegram_message(reply_config, reply)
-    else:
+    elif text in _HELP_WORDS:
         send_telegram_message(reply_config, _COMMANDS_HELP)
+    else:
+        threading.Thread(target=_save_feedback, args=(reply_config, chat_id, raw_text, None), daemon=True).start()
 
 
 if __name__ == "__main__":

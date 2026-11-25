@@ -100,6 +100,10 @@ def format_listing_message(listing: Listing, search_name: str) -> str:
             sell_line += f"  •  {profit_emoji} Gewinn: ~{listing.estimated_profit:+d} EUR"
         lines.append(sell_line)
 
+    # Seller won't negotiate
+    if listing.fixed_price:
+        lines.append("💶 Festpreis")
+
     # Phone hangs in recovery/DFU mode — usually fixable by restoring the software
     if listing.recovery:
         lines.append("🔄 Recovery-Modus")

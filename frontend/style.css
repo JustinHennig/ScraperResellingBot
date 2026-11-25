@@ -703,3 +703,55 @@ input:checked + .toggle-slider::before {
 @media (max-width: 640px) {
   .ratings-summary { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* -- Feedback page --------------------------------------- */
+
+.feedback-summary { grid-template-columns: repeat(3, 1fr); }
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.feedback-item {
+  background: var(--card-inner);
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 0.8rem;
+}
+.feedback-item.done { opacity: 0.55; }
+
+.feedback-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.feedback-head .muted,
+.feedback-listing .muted { color: var(--text-dim); }
+.feedback-done { color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+
+.feedback-text {
+  margin: 6px 0;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.feedback-listing { margin-top: 4px; overflow-wrap: anywhere; }
+.feedback-listing a { color: var(--text); font-weight: 500; text-decoration: none; }
+.feedback-listing a:hover { color: var(--accent); }
+
+.feedback-details { margin-top: 4px; color: var(--text-muted); }
+.feedback-details summary { cursor: pointer; }
+.feedback-details pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  color: var(--text);
+}

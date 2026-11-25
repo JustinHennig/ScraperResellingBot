@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ResellingBot — Feedback</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="card log-page-card">
+      <!-- Header -->
+      <div class="header">
+        <div class="header-title">
+          <svg
+            class="logo-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <h1>Feedback</h1>
+        </div>
+        <a href="/" class="btn-set" style="text-decoration: none"
+          >← Dashboard</a
+        >
+      </div>
+
+      <!-- Summary -->
+      <div class="ratings-summary feedback-summary" id="feedbackSummary"></div>
+
+      <!-- Controls -->
+      <div class="log-toolbar">
+        <div class="log-toolbar-left">
+          <label class="log-lines-label">
+            Anzeigen:
+            <select id="doneFilter" class="log-lines-select">
+              <option value="open" selected>Offen</option>
+              <option value="done">Erledigt</option>
+              <option value="all">Alle</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <!-- Entries -->
+      <div class="feedback-list" id="feedbackList"></div>
+      <p class="ratings-empty" id="feedbackEmpty" hidden>
+        Keine Vorschläge. Schreib dem Bot auf Telegram einfach einen Text, oder
+        antworte auf eine Meldung.
+      </p>
+    </div>
+
+    <script src="{{ url_for('static', filename='feedback.js') }}" defer></script>
+  </body>
+</html>
